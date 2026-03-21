@@ -119,6 +119,7 @@ export function TaskFormDialog({
     form.setValue("estimate_minutes", value[0])
   }
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const estimateMinutes = form.watch("estimate_minutes") || 0
   const hours = Math.floor(estimateMinutes / 60)
   const minutes = estimateMinutes % 60
