@@ -88,6 +88,7 @@ export function TaskFormDialog({
       estimate_minutes: 0,
       is_recurring: false,
       label_ids: [],
+      list_id: lists.length > 0 ? lists[0].id : undefined,
     },
   })
 
@@ -96,8 +97,13 @@ export function TaskFormDialog({
       form.reset(task)
       setSelectedLabels(task.label_ids || [])
       setShowRecurringOptions(task.is_recurring || false)
+    } else {
+      // Update default list_id when lists change
+      if (lists.length > 0 && !form.getValues("list_id")) {
+        form.setValue("list_id", lists[0].id)
+      }
     }
-  }, [task, form])
+  }, [task, form, lists])
 
   const handleSubmit = (data: TaskFormData) => {
     onSave({ ...data, label_ids: selectedLabels })
