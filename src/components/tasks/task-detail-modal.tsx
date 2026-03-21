@@ -59,9 +59,6 @@ export function TaskDetailModal({
     const checkActiveEntry = async () => {
       const activeEntry = await getActiveTimeEntry(task.id)
       if (activeEntry) {
-        const startedAt = new Date(activeEntry.started_at)
-        const now = new Date()
-        const elapsed = Math.floor((now.getTime() - startedAt.getTime()) / 1000)
         // Start the timer with the elapsed time
         startTimer()
       }
