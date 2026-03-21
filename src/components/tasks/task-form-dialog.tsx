@@ -88,7 +88,7 @@ export function TaskFormDialog({
       estimate_minutes: 0,
       is_recurring: false,
       label_ids: [],
-      list_id: lists.length > 0 ? lists[0].id : undefined,
+      list_id: lists.length > 0 ? lists[0].id : 1, // Default to first list or ID 1
     },
   })
 
