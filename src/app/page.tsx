@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
-import { motion } from "framer-motion"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TaskList } from "@/components/tasks/task-list"
 import { TaskFormDialog } from "@/components/tasks/task-form-dialog"
@@ -12,7 +11,7 @@ import {
   getLabels, createTask, toggleTaskComplete, deleteTask,
   updateTask, createList, createLabel, getTaskById
 } from "@/app/actions/tasks"
-import type { Task, List, Label, TaskWithDetails } from "@/lib/types"
+import type { Task, List, Label, TaskWithDetails, TaskFormData } from "@/lib/types"
 import { format } from "date-fns"
 
 export default function DashboardPage() {
@@ -32,23 +31,7 @@ export default function DashboardPage() {
   const [overdueCount, setOverdueCount] = useState(0)
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<TaskWithDetails | null>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [view, listId, labelId, showCompleted])
-
-  useEffect(() => {
-    // Check for overdue tasks
-    const checkOverdue = async () => {
-      const overdue = await getOverdueTasks(new Date().toISOString())
-      setOverdueCount(overdue.length)
-    }
-    checkOverdue()
-    // Check every minute
-    const interval = setInterval(checkOverdue, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [listsData, labelsData] = await Promise.all([
@@ -67,7 +50,7 @@ export default function DashboardPage() {
       } else if (labelId) {
         // For now, get all tasks and filter by label
         tasksData = await getTasks(showCompleted)
-        tasksData = tasksData.filter(task => {
+        tasksData = tasksData.filter(() => {
           // TODO: Implement label filtering
           return true
         })
@@ -104,7 +87,23 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [view, listId, labelId, showCompleted, searchQuery])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    // Check for overdue tasks
+    const checkOverdue = async () => {
+      const overdue = await getOverdueTasks(new Date().toISOString())
+      setOverdueCount(overdue.length)
+    }
+    checkOverdue()
+    // Check every minute
+    const interval = setInterval(checkOverdue, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleToggleComplete = async (taskId: number) => {
     await toggleTaskComplete(taskId)
