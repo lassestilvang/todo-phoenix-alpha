@@ -99,7 +99,7 @@ export function TaskFormDialog({
       setShowRecurringOptions(task.is_recurring || false)
     } else {
       // Update default list_id when lists change
-      if (lists.length > 0 && !form.getValues("list_id")) {
+      if (lists.length > 0) {
         form.setValue("list_id", lists[0].id)
       }
     }
