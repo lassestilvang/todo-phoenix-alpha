@@ -1,65 +1,239 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
+import { motion } from "framer-motion"
+import { Sidebar } from "@/components/layout/sidebar"
+import { TaskList } from "@/components/tasks/task-list"
+import { TaskFormDialog } from "@/components/tasks/task-form-dialog"
+import { 
+  getLists, getTasks, getTasksByListId, getTasksByDate,
+  getTasksByDateRange, getUpcomingTasks, getOverdueTasks,
+  getLabels, createTask, toggleTaskComplete, deleteTask,
+  updateTask, createList, createLabel, getTaskById
+} from "@/app/actions/tasks"
+import type { Task, List, Label, TaskWithDetails } from "@/lib/types"
+import { format } from "date-fns"
+
+export default function DashboardPage() {
+  const searchParams = useSearchParams()
+  const view = searchParams.get("view") || "today"
+  const listId = searchParams.get("list")
+  const labelId = searchParams.get("label")
+  
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [lists, setLists] = useState<List[]>([])
+  const [labels, setLabels] = useState<Label[]>([])
+  const [showCompleted, setShowCompleted] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false)
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null)
+  const [overdueCount, setOverdueCount] = useState(0)
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<TaskWithDetails | null>(null)
+
+  useEffect(() => {
+    loadData()
+  }, [view, listId, labelId, showCompleted])
+
+  useEffect(() => {
+    // Check for overdue tasks
+    const checkOverdue = async () => {
+      const overdue = await getOverdueTasks(new Date().toISOString())
+      setOverdueCount(overdue.length)
+    }
+    checkOverdue()
+    // Check every minute
+    const interval = setInterval(checkOverdue, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [listsData, labelsData] = await Promise.all([
+        getLists(),
+        getLabels()
+      ])
+      setLists(listsData)
+      setLabels(labelsData)
+
+      let tasksData: Task[] = []
+      const today = format(new Date(), "yyyy-MM-dd")
+      const nextWeek = format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd")
+
+      if (listId) {
+        tasksData = await getTasksByListId(parseInt(listId), showCompleted)
+      } else if (labelId) {
+        // For now, get all tasks and filter by label
+        tasksData = await getTasks(showCompleted)
+        tasksData = tasksData.filter(task => {
+          // TODO: Implement label filtering
+          return true
+        })
+      } else {
+        switch (view) {
+          case "today":
+            tasksData = await getTasksByDate(today, showCompleted)
+            break
+          case "next_7_days":
+            tasksData = await getTasksByDateRange(today, nextWeek, showCompleted)
+            break
+          case "upcoming":
+            tasksData = await getUpcomingTasks(today, showCompleted)
+            break
+          case "all":
+            tasksData = await getTasks(showCompleted)
+            break
+          default:
+            tasksData = await getTasksByDate(today, showCompleted)
+        }
+      }
+
+      // Apply search filter
+      if (searchQuery) {
+        tasksData = tasksData.filter(task =>
+          task.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
+      }
+
+      setTasks(tasksData)
+    } catch (error) {
+      console.error("Error loading data:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleToggleComplete = async (taskId: number) => {
+    await toggleTaskComplete(taskId)
+    loadData()
+  }
+
+  const handleDeleteTask = async (taskId: number) => {
+    if (confirm("Are you sure you want to delete this task?")) {
+      await deleteTask(taskId)
+      loadData()
+    }
+  }
+
+  const handleEditTask = (taskId: number) => {
+    setEditingTaskId(taskId)
+    setIsTaskFormOpen(true)
+  }
+
+  const handleCreateTask = () => {
+    setEditingTaskId(null)
+    setIsTaskFormOpen(true)
+  }
+
+  const handleSaveTask = async (data: any) => {
+    if (editingTaskId) {
+      await updateTask(editingTaskId, data)
+    } else {
+      await createTask(data)
+    }
+    loadData()
+  }
+
+  const handleCreateList = () => {
+    // TODO: Implement list creation dialog
+    const name = prompt("Enter list name:")
+    if (name) {
+      const color = "#6366f1"
+      const emoji = "📋"
+      const icon = "List"
+      createList(name, color, emoji, icon)
+    }
+  }
+
+  const handleCreateLabel = () => {
+    // TODO: Implement label creation dialog
+    const name = prompt("Enter label name:")
+    if (name) {
+      const color = "#ec4899"
+      const emoji = "🏷️"
+      createLabel(name, color, emoji)
+    }
+  }
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    loadData()
+  }
+
+  const handleViewTaskDetails = async (taskId: number) => {
+    const taskDetails = await getTaskById(taskId)
+    if (taskDetails) {
+      setSelectedTaskDetails(taskDetails)
+    }
+  }
+
+  const handleCloseTaskDetails = () => {
+    setSelectedTaskDetails(null)
+  }
+
+  const convertTaskToFormData = (task: Task) => {
+    return {
+      name: task.name,
+      description: task.description || undefined,
+      date: task.date ? new Date(task.date) : undefined,
+      deadline: task.deadline ? new Date(task.deadline) : undefined,
+      estimate_minutes: task.estimate_minutes,
+      priority: task.priority,
+      is_recurring: task.is_recurring === 1,
+      recurring_pattern: task.recurring_pattern as any || undefined,
+      recurring_custom_value: task.recurring_custom_value || undefined,
+      list_id: task.list_id,
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <div className="flex h-screen bg-background">
+      <Sidebar
+        lists={lists}
+        labels={labels}
+        overdueCount={overdueCount}
+        onCreateList={handleCreateList}
+        onCreateLabel={handleCreateLabel}
+      />
+      
+      <main className="flex-1 overflow-hidden">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <TaskList
+            tasks={tasks}
+            showCompleted={showCompleted}
+            onToggleCompleted={handleToggleComplete}
+            onDeleteTask={handleDeleteTask}
+            onEditTask={handleEditTask}
+            onCreateTask={handleCreateTask}
+            onToggleShowCompleted={() => {
+              setShowCompleted(!showCompleted)
+              loadData()
+            }}
+            onSearch={handleSearch}
+            searchQuery={searchQuery}
+            onViewTaskDetails={handleViewTaskDetails}
+            selectedTaskDetails={selectedTaskDetails}
+            onCloseTaskDetails={handleCloseTaskDetails}
+          />
+        )}
       </main>
+
+      <TaskFormDialog
+        open={isTaskFormOpen}
+        onClose={() => setIsTaskFormOpen(false)}
+        onSave={handleSaveTask}
+        task={editingTaskId ? convertTaskToFormData(tasks.find(t => t.id === editingTaskId)!) : undefined}
+        lists={lists}
+        labels={labels}
+        mode={editingTaskId ? "edit" : "create"}
+      />
     </div>
-  );
+  )
 }

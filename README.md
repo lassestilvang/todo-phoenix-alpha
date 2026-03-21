@@ -1,36 +1,169 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Daily Task Planner
+
+A modern, professional daily task planner built with Next.js 16, TypeScript, Tailwind CSS, and shadcn/ui.
+
+## Features
+
+### Core Features
+- ✅ Lists management with custom colors and emojis
+- ✅ Task CRUD operations with full properties
+- ✅ Multiple views: Today, Next 7 Days, Upcoming, All
+- ✅ Subtasks with full properties
+- ✅ Labels with colors and emojis
+- ✅ Change logging for all task modifications
+- ✅ Priority levels (High, Medium, Low, None)
+- ✅ Date and deadline scheduling
+- ✅ Time estimates and actual time tracking
+- ✅ Search functionality
+- ✅ Overdue task highlighting
+- ✅ Dark/Light theme support
+
+### Advanced Features
+- ✅ Task detail modal with history
+- ⏳ Reminders system (in progress)
+- ⏳ Attachments (in progress)
+- ⏳ Time tracking timer (in progress)
+- ⏳ Recurring tasks (in progress)
+- ⏳ Natural language task entry (stretch)
+- ⏳ Smart suggestions (stretch)
+
+## Tech Stack
+
+- **Framework**: Next.js 16 with App Router
+- **Language**: TypeScript (strict mode)
+- **Styling**: Tailwind CSS
+- **Components**: shadcn/ui
+- **Animations**: Framer Motion
+- **Database**: SQLite (better-sqlite3)
+- **Forms**: react-hook-form + zod
+- **Date Handling**: date-fns
+- **Icons**: lucide-react
+- **Package Manager**: Bun
+- **Testing**: Bun Test
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Bun installed on your system
+
+### Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install dependencies
+bun install
+
+# Run development server
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The application will be available at [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Building for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+bun run build
+bun start
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+todo-phoenix-alpha/
+├── src/
+│   ├── app/
+│   │   ├── actions/          # Server actions
+│   │   ├── (dashboard)/      # Dashboard routes
+│   │   ├── layout.tsx        # Root layout
+│   │   └── page.tsx          # Dashboard page
+│   ├── components/
+│   │   ├── layout/           # Layout components (Sidebar)
+│   │   ├── tasks/            # Task-related components
+│   │   ├── ui/               # shadcn/ui components
+│   │   └── providers/        # Context providers
+│   ├── lib/
+│   │   ├── db/               # Database operations
+│   │   ├── types/            # TypeScript types
+│   │   └── utils.ts          # Utility functions
+│   └── ...
+├── data/                     # SQLite database (gitignored)
+├── public/                   # Static assets
+└── tests/                    # Test files
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Database Schema
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The application uses SQLite with the following tables:
 
-## Deploy on Vercel
+- `lists` - Task lists with colors and emojis
+- `tasks` - Main tasks with all properties
+- `subtasks` - Subtasks with full properties
+- `labels` - Labels with colors and emojis
+- `task_labels` - Many-to-many relationship between tasks and labels
+- `subtask_labels` - Many-to-many relationship between subtasks and labels
+- `task_changes` - Audit trail for task changes
+- `subtask_changes` - Audit trail for subtask changes
+- `reminders` - Task reminders
+- `attachments` - Task attachments
+- `time_entries` - Time tracking entries
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Usage
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Creating a Task
+1. Click the "New Task" button
+2. Fill in the task details (name, description, date, deadline, etc.)
+3. Set priority, estimate, and labels
+4. Click "Create Task"
+
+### Managing Tasks
+- **Complete**: Click the checkbox next to a task
+- **Edit**: Click the edit button in the task menu
+- **Delete**: Click the delete button in the task menu
+- **View Details**: Double-click on a task card
+
+### Using Views
+- **Today**: Shows tasks scheduled for today
+- **Next 7 Days**: Shows tasks for the next week
+- **Upcoming**: Shows all future tasks
+- **All**: Shows all tasks
+- Toggle completed tasks visibility with the button
+
+### Lists and Labels
+- Create custom lists from the sidebar
+- Create custom labels from the sidebar
+- Filter tasks by list or label
+
+## Development
+
+### Running Tests
+
+```bash
+bun test
+```
+
+### Code Style
+
+The project uses:
+- TypeScript strict mode
+- ESLint for linting
+- Prettier for formatting (configured in .prettierrc)
+
+## Future Enhancements
+
+- [ ] Complete reminders system with notifications
+- [ ] Attachments with file upload
+- [ ] Time tracking timer with persistence
+- [ ] Recurring task logic
+- [ ] Natural language task entry
+- [ ] Smart scheduling suggestions
+- [ ] Drag and drop task reordering
+- [ ] Keyboard shortcuts
+- [ ] Export/Import functionality
+- [ ] Mobile app version
+
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
