@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
 import { 
   X, Clock, Calendar, Tag, AlertCircle, History, 
   Paperclip, Timer, Play, Pause, Square
@@ -54,7 +53,6 @@ export function TaskDetailModal({
   onCreateSubtask,
 }: TaskDetailModalProps) {
   const { isRunning, elapsedSeconds, startTimer, stopTimer, resetTimer, formatTime } = useTimeTracker(task.id)
-  const [timerSeconds, setTimerSeconds] = useState(0)
 
   useEffect(() => {
     // Check if there's an active time entry
@@ -64,8 +62,7 @@ export function TaskDetailModal({
         const startedAt = new Date(activeEntry.started_at)
         const now = new Date()
         const elapsed = Math.floor((now.getTime() - startedAt.getTime()) / 1000)
-        setTimerSeconds(elapsed)
-        // Start the timer
+        // Start the timer with the elapsed time
         startTimer()
       }
     }
@@ -94,12 +91,10 @@ export function TaskDetailModal({
       await stopTimeEntry(activeEntry.id, new Date(), durationMinutes)
     }
     stopTimer()
-    setTimerSeconds(0)
   }
 
   const handleResetTimer = () => {
     resetTimer()
-    setTimerSeconds(0)
   }
 
   return (

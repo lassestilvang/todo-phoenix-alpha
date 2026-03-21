@@ -11,7 +11,7 @@ import {
   getLabels, createTask, toggleTaskComplete, deleteTask,
   updateTask, createList, createLabel, getTaskById
 } from "@/app/actions/tasks"
-import type { Task, List, Label, TaskWithDetails, TaskFormData } from "@/lib/types"
+import type { Task, List, Label, TaskWithDetails, TaskFormData, RecurringPattern } from "@/lib/types"
 import { format } from "date-fns"
 
 export default function DashboardPage() {
@@ -127,7 +127,7 @@ export default function DashboardPage() {
     setIsTaskFormOpen(true)
   }
 
-  const handleSaveTask = async (data: any) => {
+  const handleSaveTask = async (data: TaskFormData) => {
     if (editingTaskId) {
       await updateTask(editingTaskId, data)
     } else {
@@ -182,7 +182,7 @@ export default function DashboardPage() {
       estimate_minutes: task.estimate_minutes,
       priority: task.priority,
       is_recurring: task.is_recurring === 1,
-      recurring_pattern: task.recurring_pattern as any || undefined,
+      recurring_pattern: task.recurring_pattern as RecurringPattern | undefined,
       recurring_custom_value: task.recurring_custom_value || undefined,
       list_id: task.list_id,
     }

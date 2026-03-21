@@ -6,8 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
-  X, Calendar, Clock, Tag, AlertCircle, Plus, Trash2,
-  Save, Repeat, Paperclip
+  Calendar as CalendarComponent, CalendarDays, Clock, AlertCircle, 
+  Plus, Tag, Trash2, Label as UILabel
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"

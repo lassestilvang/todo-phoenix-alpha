@@ -5,8 +5,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
-  Inbox, Calendar, CalendarDays, ListTodo, Search, 
-  Plus, Settings, ChevronLeft, ChevronRight, Tag,
+  Inbox, Calendar, CalendarDays, ListTodo, 
+  Plus, Settings, ChevronLeft, ChevronRight,
   Sun, Moon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
