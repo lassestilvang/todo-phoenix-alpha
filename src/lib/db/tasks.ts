@@ -1,5 +1,5 @@
 import db from './schema';
-import { Task, TaskWithDetails, TaskFormData, Priority } from '../types';
+import { Task, TaskWithDetails, TaskFormData } from '../types';
 
 export const taskOperations = {
   getAll: (includeCompleted: boolean = true): Task[] => {
@@ -116,7 +116,7 @@ export const taskOperations = {
     if (!currentTask) throw new Error('Task not found');
 
     // Log changes
-    const changesToLog: { field: string; oldValue: any; newValue: any }[] = [];
+    const changesToLog: { field: string; oldValue: string | number | boolean | null; newValue: string | number | boolean | null }[] = [];
 
     if (updates.name !== undefined && updates.name !== currentTask.name) {
       changesToLog.push({ field: 'name', oldValue: currentTask.name, newValue: updates.name });
@@ -157,7 +157,7 @@ export const taskOperations = {
 
     // Update the task
     const updateFields: string[] = [];
-    const updateValues: any[] = [];
+    const updateValues: (string | number | Date | null)[] = [];
 
     if (updates.name !== undefined) {
       updateFields.push('name = ?');

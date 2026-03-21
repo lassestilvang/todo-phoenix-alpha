@@ -67,7 +67,7 @@ export const subtaskOperations = {
     if (!currentSubtask) throw new Error('Subtask not found');
 
     // Log changes
-    const changesToLog: { field: string; oldValue: any; newValue: any }[] = [];
+    const changesToLog: { field: string; oldValue: string | number | boolean | null; newValue: string | number | boolean | null }[] = [];
 
     if (updates.name !== undefined && updates.name !== currentSubtask.name) {
       changesToLog.push({ field: 'name', oldValue: currentSubtask.name, newValue: updates.name });
@@ -105,7 +105,7 @@ export const subtaskOperations = {
 
     // Update the subtask
     const updateFields: string[] = [];
-    const updateValues: any[] = [];
+    const updateValues: (string | number | Date | null)[] = [];
 
     if (updates.name !== undefined) {
       updateFields.push('name = ?');

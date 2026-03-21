@@ -3,9 +3,7 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
-  Plus, Search, Filter, MoreVertical, Check, Clock, 
-  AlertCircle, Tag, Calendar, ChevronDown, ChevronUp,
-  Play, Pause, Square
+  Check, Clock, AlertCircle, Calendar, MoreHorizontal, Edit, Trash2, Search, Play, Plus, MoreVertical
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"

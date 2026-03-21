@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { 
   X, Clock, Calendar, Tag, AlertCircle, History, 
   Paperclip, Timer, Play, Pause, Square
