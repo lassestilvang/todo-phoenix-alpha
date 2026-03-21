@@ -53,7 +53,7 @@ const taskSchema = z.object({
     "custom_days_of_month"
   ]).optional(),
   recurring_custom_value: z.string().optional(),
-  list_id: z.number().optional(),
+  list_id: z.number().min(1, "Please select a list"),
   label_ids: z.array(z.number()).optional(),
 })
 
