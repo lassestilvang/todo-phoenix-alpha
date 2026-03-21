@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
@@ -247,20 +247,26 @@ export function TaskFormDialog({
 
             <div>
               <UILabel>Priority</UILabel>
-              <Select
-                value={form.watch("priority")}
-                onValueChange={(value: Priority) => form.setValue("priority", value)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="none">None</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="priority"
+                control={form.control}
+                render={({ field }) => (
+                  <Select
+                    value={field.value}
+                    onValueChange={(value: Priority) => field.onChange(value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div>
@@ -312,26 +318,32 @@ export function TaskFormDialog({
                 >
                   <div>
                     <UILabel>Pattern</UILabel>
-                    <Select
-                      value={form.watch("recurring_pattern")}
-                      onValueChange={(value: RecurringPattern) => 
-                        form.setValue("recurring_pattern", value)
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="every_day">Every Day</SelectItem>
-                        <SelectItem value="every_week">Every Week</SelectItem>
-                        <SelectItem value="every_weekday">Every Weekday</SelectItem>
-                        <SelectItem value="every_month">Every Month</SelectItem>
-                        <SelectItem value="every_year">Every Year</SelectItem>
-                        <SelectItem value="custom_n_days">Custom: Every N Days</SelectItem>
-                        <SelectItem value="custom_n_weeks">Custom: Every N Weeks</SelectItem>
-                        <SelectItem value="custom_days_of_month">Custom: Days of Month</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Controller
+                      name="recurring_pattern"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={(value: RecurringPattern) => 
+                            field.onChange(value)
+                          }
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="every_day">Every Day</SelectItem>
+                            <SelectItem value="every_week">Every Week</SelectItem>
+                            <SelectItem value="every_weekday">Every Weekday</SelectItem>
+                            <SelectItem value="every_month">Every Month</SelectItem>
+                            <SelectItem value="every_year">Every Year</SelectItem>
+                            <SelectItem value="custom_n_days">Custom: Every N Days</SelectItem>
+                            <SelectItem value="custom_n_weeks">Custom: Every N Weeks</SelectItem>
+                            <SelectItem value="custom_days_of_month">Custom: Days of Month</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   </div>
 
                   {form.watch("recurring_pattern")?.includes("custom") && (
@@ -386,21 +398,27 @@ export function TaskFormDialog({
           {/* List */}
           <div className="space-y-4">
             <UILabel>List</UILabel>
-            <Select
-              value={form.watch("list_id")?.toString()}
-              onValueChange={(value) => form.setValue("list_id", parseInt(value))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a list" />
-              </SelectTrigger>
-              <SelectContent>
-                {lists.map((list) => (
-                  <SelectItem key={list.id} value={list.id.toString()}>
-                    {list.emoji} {list.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Controller
+              name="list_id"
+              control={form.control}
+              render={({ field }) => (
+                <Select
+                  value={field.value?.toString()}
+                  onValueChange={(value) => field.onChange(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a list" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lists.map((list) => (
+                      <SelectItem key={list.id} value={list.id.toString()}>
+                        {list.emoji} {list.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           {/* Actions */}
