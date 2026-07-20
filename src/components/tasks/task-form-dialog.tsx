@@ -5,8 +5,9 @@ import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { 
-  Calendar, Clock, Tag, AlertCircle, Save, Repeat
+import {
+  Calendar, Clock, Tag, AlertCircle, Save, Repeat,
+  Paperclip as IconPaperclip, X as IconX
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -53,8 +54,11 @@ const taskSchema = z.object({
     "custom_days_of_month"
   ]).optional(),
   recurring_custom_value: z.string().optional(),
+  reminder_minutes: z.number().optional(),
+  reminder_time: z.string().optional(),
   list_id: z.number().min(1, "Please select a list"),
   label_ids: z.array(z.number()).optional(),
+  attachments: z.array(z.string()).optional(),
 })
 
 interface TaskFormDialogProps {
@@ -78,6 +82,8 @@ export function TaskFormDialog({
 }: TaskFormDialogProps) {
   const [selectedLabels, setSelectedLabels] = useState<number[]>(task?.label_ids || [])
   const [showRecurringOptions, setShowRecurringOptions] = useState(false)
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>(task?.attachments || [])
+  const [showReminderOptions, setShowReminderOptions] = useState(false)
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -380,8 +386,8 @@ export function TaskFormDialog({
                     selectedLabels.includes(label.id) && "border-primary"
                   )}
                   style={{
-                    backgroundColor: selectedLabels.includes(label.id) 
-                      ? label.color 
+                    backgroundColor: selectedLabels.includes(label.id)
+                      ? label.color
                       : "transparent",
                     color: selectedLabels.includes(label.id) ? "white" : undefined,
                   }}
@@ -390,6 +396,199 @@ export function TaskFormDialog({
                   {label.emoji} {label.name}
                 </Badge>
               ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Reminders */}
+          <div className="space-y-4">
+            <h3 className="font-medium flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Reminders
+            </h3>
+
+            <div className="space-y-2">
+              <Checkbox
+                checked={showReminderOptions}
+                onCheckedChange={(checked) => {
+                  setShowReminderOptions(checked as boolean)
+                  // If turning off, clear reminder
+                  if (!checked) {
+                    form.setValue("reminder_minutes", undefined)
+                    form.setValue("reminder_time", undefined)
+                  }
+                }}
+              />
+
+              {showReminderOptions && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mt-2"
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <UILabel>Remind me (minutes before)</UILabel>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="e.g., 10, 30, 60"
+                        {...form.register("reminder_minutes", {
+                          validate: (value) =>
+                            value === undefined ||
+                            (value >= 0 && value <= 1440) ||
+                            "Please enter a valid number (0-1440)"
+                        })}
+                        className="mt-1"
+                      />
+                      {form.formState.errors.reminder_minutes && (
+                        <p className="text-sm text-destructive mt-1">
+                          {form.formState.errors.reminder_minutes.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <UILabel>Or specific time</UILabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal mt-1",
+                              !form.watch("reminder_time") && "text-muted-foreground"
+                            )}
+                          >
+                            <Clock className="mr-2 h-4 w-4" />
+                            {form.watch("reminder_time") ? (
+                              <span>{form.watch("reminder_time")}</span>
+                            ) : (
+                              <span>Pick time</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between px-4 py-2">
+                              <span>Hour</span>
+                              <span>Minute</span>
+                            </div>
+                            <div className="border-t">
+                              <div className="grid grid-cols-2 gap-0">
+                                {[...Array(24)].map((_, hour) => (
+                                  <div key={hour} className="border border-t-0 border-l-0 py-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="xs"
+                                      className={cn(
+                                        form.watch("reminder_time") === `${hour.toString().padStart(2, '0')}:00`
+                                          ? "bg-primary text-primary-foreground"
+                                          : ""
+                                      )}
+                                      onClick={() =>
+                                        form.setValue("reminder_time", `${hour.toString().padStart(2, '0')}:00`)
+                                      }
+                                    >
+                                      {hour.toString().padStart(2, '0')}
+                                    </Button>
+                                  </div>
+                                ))}
+                                {[...Array(60)].map((_, minute) => (
+                                  <div key={minute} className="border border-t-0 border-l-0 py-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="xs"
+                                      className={cn(
+                                        form.watch("reminder_time")?.endsWith(`${minute.toString().padStart(2, '0')}`)
+                                          ? "bg-primary text-primary-foreground"
+                                          : ""
+                                      )}
+                                      onClick={() => {
+                                        const hour = form.watch("reminder_time")?.split(':')[0] || '00'
+                                        form.setValue("reminder_time", `${hour.padStart(2, '0')}:${minute.toString().padStart(2, '0')}`)
+                                      }}
+                                    >
+                                      {minute.toString().padStart(2, '0')}
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Attachments */}
+          <div className="space-y-4">
+            <h3 className="font-medium flex items-center gap-2">
+              <IconPaperclip className="h-4 w-4" />
+              Attachments
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <UILabel>Attach files</UILabel>
+                <Button variant="outline" size="sm" onClick={() => {
+                  // Trigger file input click
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.multiple = true
+                  input.onchange = (e: any) => {
+                    if (e.target && (e.target as HTMLInputElement).files) {
+                      const files = Array.from((e.target as HTMLInputElement).files || [])
+                      if (files.length > 0) {
+                        const fileNames = files.map(f => f.name)
+                        setSelectedAttachments(prev => [...prev, ...fileNames])
+                        // Note: Actual file upload would happen separately
+                        // For now we just store filenames
+                      }
+                    }
+                  }
+                  input.click()
+                }}>
+                  Upload Files
+                </Button>
+              </div>
+
+              {selectedAttachments.length > 0 && (
+                <div className="mt-2">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAttachments.map((filename, index) => (
+                      <Badge
+                        key={`${filename}-${index}`}
+                        variant="outline"
+                        className="flex items-center gap-1"
+                      >
+                        <IconPaperclip className="h-3 w-3 mr-1" />
+                        <span className="text-xs">{filename}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => {
+                            setSelectedAttachments(prev => prev.filter((_, i) => i !== index))
+                          }}
+                        >
+                          <IconX className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Note: File upload implementation requires backend integration
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
