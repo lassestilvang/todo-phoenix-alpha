@@ -2,7 +2,10 @@ import db from './schema';
 import { TimeEntry } from '../types';
 
 export const timeEntryOperations = {
-  getAll: (taskId: number): TimeEntry[] => {
+  getAll: (taskId?: number | null = null): TimeEntry[] | TimeEntry => {
+    if (taskId === null) {
+      return db.prepare('SELECT * FROM time_entries ORDER BY started_at DESC').all() as TimeEntry[];
+    }
     return db.prepare('SELECT * FROM time_entries WHERE task_id = ? ORDER BY started_at DESC').all(taskId) as TimeEntry[];
   },
 
