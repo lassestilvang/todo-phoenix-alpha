@@ -1,9 +1,73 @@
 import db from './schema';
 import { Task, TaskWithDetails, TaskFormData } from '../types';
 
+// Helper function to calculate next occurrence date based on recurrence pattern
+export const calculateNextOccurrence = (
+  baseDate: Date | null,
+  pattern: string | null,
+  customValue: string | null
+): Date | null => {
+  if (!baseDate || !pattern) return null;
+
+  const date = new Date(baseDate);
+  const value = customValue ? parseInt(customValue, 10) : 1;
+
+  switch (pattern) {
+    case 'every_day':
+      date.setDate(date.getDate() + 1);
+      return date;
+
+    case 'every_week':
+      date.setDate(date.getDate() + 7);
+      return date;
+
+    case 'every_weekday': {
+      // Skip weekends, move to next weekday
+      do {
+        date.setDate(date.getDate() + 1);
+      } while (date.getDay() === 0 || date.getDay() === 6); // Skip Sunday (0) and Saturday (6)
+      return date;
+    }
+
+    case 'every_month':
+      date.setMonth(date.getMonth() + 1);
+      return date;
+
+    case 'every_year':
+      date.setFullYear(date.getFullYear() + 1);
+      return date;
+
+    case 'custom_n_days':
+      if (!isNaN(value) && value > 0) {
+        date.setDate(date.getDate() + value);
+        return date;
+      }
+      return null;
+
+    case 'custom_n_weeks':
+      if (!isNaN(value) && value > 0) {
+        date.setDate(date.getDate() + value * 7);
+        return date;
+      }
+      return null;
+
+    case 'custom_days_of_month':
+      if (!isNaN(value) && value > 0 && value <= 31) {
+        // Set to the custom day of next month
+        date.setMonth(date.getMonth() + 1);
+        date.setDate(Math.min(value, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()));
+        return date;
+      }
+      return null;
+
+    default:
+      return null;
+  }
+};
+
 export const taskOperations = {
   getAll: (includeCompleted: boolean = true): Task[] => {
-    const query = includeCompleted 
+    const query = includeCompleted
       ? 'SELECT * FROM tasks ORDER BY date ASC, priority DESC, created_at DESC'
       : 'SELECT * FROM tasks WHERE is_completed = 0 ORDER BY date ASC, priority DESC, created_at DESC';
     return db.prepare(query).all() as Task[];
@@ -71,7 +135,7 @@ export const taskOperations = {
 
   getOverdue: (currentDate: string): Task[] => {
     return db.prepare(`
-      SELECT * FROM tasks 
+      SELECT * FROM tasks
       WHERE deadline < ? AND is_completed = 0
       ORDER BY deadline ASC
     `).all(currentDate) as Task[];
@@ -80,8 +144,8 @@ export const taskOperations = {
   create: (data: TaskFormData): Task => {
     const result = db.prepare(`
       INSERT INTO tasks (
-        list_id, name, description, date, deadline, 
-        estimate_minutes, priority, is_recurring, 
+        list_id, name, description, date, deadline,
+        estimate_minutes, priority, is_recurring,
         recurring_pattern, recurring_custom_value
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -106,6 +170,43 @@ export const taskOperations = {
       for (const labelId of data.label_ids) {
         insertLabel.run(taskId, labelId);
       }
+    }
+
+    // Create reminders if provided
+    if (data.reminder_minutes !== undefined || data.reminder_time !== undefined) {
+      let reminderTime: Date;
+
+      if (data.reminder_time !== undefined) {
+        // Parse reminder_time string like "HH:mm" and combine with task date
+        const [hours, minutes] = data.reminder_time.split(':').map(Number);
+        const baseDate = data.date ? new Date(data.date) : new Date();
+        reminderTime = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes);
+
+        // If the time has already passed today, schedule for tomorrow
+        if (reminderTime <= new Date()) {
+          reminderTime.setDate(reminderTime.getDate() + 1);
+        }
+      } else if (data.reminder_minutes !== undefined && data.date !== undefined) {
+        // Calculate reminder time based on minutes before task date/time
+        const taskDate = data.date ? new Date(data.date) : new Date();
+        if (data.deadline) {
+          // If there's a deadline, use that for reminder calculation
+          reminderTime = new Date(taskDate.getTime() - (data.reminder_minutes * 60000));
+        } else {
+          // Otherwise use the date (assuming 9am if no time specified)
+          reminderTime = new Date(taskDate.getTime() - (data.reminder_minutes * 60000));
+          // Set to 9am if no time was specified in the date
+          if (reminderTime.getHours() === 0 && reminderTime.getMinutes() === 0) {
+            reminderTime.setHours(9, 0, 0);
+          }
+        }
+      } else {
+        // Default: remind at task time
+        reminderTime = data.date ? new Date(data.date) : new Date();
+      }
+
+      // Create the reminder
+      reminderOperations.create(taskId, reminderTime);
     }
 
     return taskOperations.getById(taskId)!;
@@ -236,9 +337,9 @@ export const taskOperations = {
     if (!task) throw new Error('Task not found');
 
     const newCompleted = task.is_completed === 0 ? 1 : 0;
-    
+
     db.prepare(`
-      UPDATE tasks 
+      UPDATE tasks
       SET is_completed = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(newCompleted, id);
@@ -262,5 +363,56 @@ export const taskOperations = {
       : `SELECT * FROM tasks WHERE (name LIKE ? OR description LIKE ?) AND is_completed = 0 ORDER BY date ASC, priority DESC, created_at DESC`;
     const searchTerm = `%${query}%`;
     return db.prepare(searchQuery).all(searchTerm, searchTerm) as Task[];
+  },
+
+  // NEW: Generate next occurrence for recurring tasks
+  generateNextOccurrence: (taskId: number): Task | null => {
+    const task = taskOperations.getById(taskId);
+    if (!task || !task.is_recurring || !task.recurring_pattern) return null;
+
+    const baseDate = task.date ? new Date(task.date) : undefined;
+    const nextDate = calculateNextOccurrence(
+      baseDate,
+      task.recurring_pattern,
+      task.recurring_custom_value
+    );
+
+    if (!nextDate) return null;
+
+    // Create a new task instance based on the recurring task
+    const nextTaskData: TaskFormData = {
+      list_id: task.list_id,
+      name: task.name,
+      description: task.description,
+      date: nextDate,
+      deadline: task.deadline ? new Date(task.deadline) : undefined,
+      estimate_minutes: task.estimate_minutes,
+      priority: task.priority,
+      is_recurring: task.is_recurring === 1,
+      recurring_pattern: task.recurring_pattern,
+      recurring_custom_value: task.recurring_custom_value,
+      reminder_minutes: task.reminder_minutes,
+      reminder_time: task.reminder_time,
+      label_ids: task.labels?.map(label => label.id) || []
+    };
+
+    // Create the new occurrence
+    return taskOperations.create(nextTaskData);
+  },
+
+  // NEW: Generate multiple future occurrences (for preview)
+  generateFutureOccurrences: (taskId: number, count: number = 5): Task[] => {
+    const occurrences: Task[] = [];
+    let currentTaskId = taskId;
+
+    for (let i = 0; i < count; i++) {
+      const nextOccurrence = taskOperations.generateNextOccurrence(currentTaskId);
+      if (!nextOccurrence) break;
+
+      occurrences.push(nextOccurrence);
+      currentTaskId = nextOccurrence.id; // Use the newly created task as base for next iteration
+    }
+
+    return occurrences;
   }
 };
