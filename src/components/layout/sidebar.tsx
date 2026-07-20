@@ -4,10 +4,10 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { 
-  Inbox, Calendar, CalendarDays, ListTodo, 
+import {
+  Inbox, Calendar, CalendarDays, ListTodo,
   Plus, Settings, ChevronLeft, ChevronRight,
-  Sun, Moon
+  Sun, Moon, BarChart
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,7 @@ export function Sidebar({
     { name: "Next 7 Days", icon: CalendarDays, href: "/?view=next_7_days" },
     { name: "Upcoming", icon: ListTodo, href: "/?view=upcoming" },
     { name: "All", icon: Inbox, href: "/?view=all" },
+    { name: "Analytics", icon: BarChart, href: "/analytics" },
   ]
 
   const isActive = (href: string) => {
