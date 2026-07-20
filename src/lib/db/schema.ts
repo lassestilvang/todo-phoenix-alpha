@@ -150,4 +150,14 @@ if (!inboxExists) {
   `).run();
 }
 
+// Add duration_minutes column to time_entries if it doesn't exist
+try {
+  db.exec('ALTER TABLE time_entries ADD COLUMN duration_minutes INTEGER DEFAULT 0');
+} catch (e: any) {
+  // Column already exists, ignore error
+  if (!e.message.includes('duplicate column name')) {
+    throw e;
+  }
+}
+
 export default db;
