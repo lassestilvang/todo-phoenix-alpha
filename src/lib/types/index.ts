@@ -146,8 +146,11 @@ export interface TaskFormData {
   is_recurring?: boolean;
   recurring_pattern?: RecurringPattern;
   recurring_custom_value?: string;
+  reminder_minutes?: number;
+  reminder_time?: string;
   list_id: number;
   label_ids?: number[];
+  attachments?: string[];
 }
 
 export interface SubtaskFormData {
