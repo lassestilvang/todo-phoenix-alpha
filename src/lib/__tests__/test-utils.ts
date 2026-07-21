@@ -51,8 +51,8 @@ vi.mock('@/lib/db', () => ({
   taskOperations: {
     create: vi.fn().mockReturnValue({ id: 1, name: 'Test Task' }),
     getAll: vi.fn().mockReturnValue([]),
-    getById: vi.fn().mockReturnValue(null),
-    getByIdWithDetails: vi.fn().mockReturnValue(null),
+    getById: vi.fn().mockReturnValue({ id: 1, deadline: new Date(Date.now() + 86400000) }),
+    getByIdWithDetails: vi.fn().mockReturnValue({ id: 1, deadline: new Date(Date.now() + 86400000) }),
     update: vi.fn(),
     delete: vi.fn(),
     toggleComplete: vi.fn(),
@@ -62,6 +62,7 @@ vi.mock('@/lib/db', () => ({
     getActiveEntry: vi.fn().mockReturnValue(null),
     stop: vi.fn(),
     getTotalTimeForTask: vi.fn().mockReturnValue(0),
+    getAll: vi.fn().mockReturnValue([]),
   },
   reminderOperations: {
     create: vi.fn(),
