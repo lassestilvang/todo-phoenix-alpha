@@ -157,6 +157,15 @@ export default function DashboardPage() {
     }
   }
 
+  // Reorder tasks - handle drag and drop
+  const handleTaskReorder = async (newOrder: Task[]) => {
+    // Update task order in the database
+    for (let i = 0; i < newOrder.length; i++) {
+      const task = newOrder[i]
+      await updateTask(task.id, { order: i })
+    }
+  }
+
   const handleSearch = (query: string) => {
     setSearchQuery(query)
     loadData()
