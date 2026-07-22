@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect } from "react"
-import { 
-  X, Clock, Calendar, Tag, AlertCircle, History, 
-  Paperclip, Timer, Play, Pause, Square
+import { useEffect, useState } from "react"
+import {
+  X, Clock, Calendar, Tag, AlertCircle, History,
+  Paperclip, Timer, Play, Pause, Square, Upload, Trash2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -13,9 +13,10 @@ import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { SubtaskList } from "./subtask-list"
 import { useTimeTracker } from "@/lib/hooks/use-time-tracker"
-import { startTimeEntry, stopTimeEntry, getActiveTimeEntry } from "@/app/actions/tasks"
+import { startTimeEntry, stopTimeEntry, getActiveTimeEntry, addAttachmentToTask } from "@/app/actions/tasks"
 import type { TaskWithDetails, Priority } from "@/lib/types"
 import { format } from "date-fns"
 
@@ -265,6 +266,40 @@ export function TaskDetailModal({
                     </Card>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* File Upload */}
+            {task.is_completed || task.attachments.length < 5 && (
+              <div className="mt-4 p-4 bg-gray-50 rounded border">
+                <h4 className="font-medium mb-3">Upload Attachment</h4>
+                <Input
+                  type="file"
+                  className="w-full"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onload = async (e) => {
+                        const base64 = (e.target as any).result?.toString().split(',')[1]
+                        if (base64) {
+                          const uploadResult = await addAttachmentToTask(
+                            task.id,
+                            file.name,
+                            file.type || 'file',
+                            base64
+                          )
+                          loadData()
+                          // Show success
+                        }
+                      }
+                      reader.readAsDataURL(file)
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Max 5 attachments per task, files under 10MB
+                </p>
               </div>
             )}
 
