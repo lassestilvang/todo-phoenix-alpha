@@ -94,6 +94,199 @@ export async function getOverdueTasks(currentDate: string) {
   return taskOperations.getOverdue(currentDate)
 }
 
+export async function createReminder(taskId: number, reminderTime: Date): Promise<Reminder> {
+  const dbReminder = db.prepare(`
+    INSERT INTO reminders (task_id, time, is_sent)
+    VALUES (?, ?, 0)
+  `);
+
+  const result = dbReminder.run(taskId, reminderTime.toISOString());
+  const reminderId = result.lastInsertRowid;
+
+  const reminder = db.prepare(`SELECT * FROM reminders WHERE id = ?`).get(reminderId);
+  return {
+    id: reminder.id,
+    taskId: reminder.task_id,
+    time: new Date(reminder.time),
+    is_sent: reminder.is_sent,
+    sent_at: reminder.sent_at,
+    created_at: reminder.created_at,
+  };
+}
+
+export async function getPendingReminders(): Promise<Reminder[]> {
+  const now = new Date().toISOString();
+  const pendingReminders = db.prepare(`
+    SELECT * FROM reminders
+    WHERE is_sent = 0 AND time <= ?
+  `).all(now);
+
+  return pendingReminders.map(r => ({
+    id: r.id,
+    taskId: r.task_id,
+    time: new Date(r.time),
+    is_sent: r.is_sent,
+    sent_at: r.sent_at,
+    created_at: r.created_at,
+  }));
+}
+
+export async function markReminderSent(reminderId: number): Promise<void> {
+  const result = db.prepare(`
+    UPDATE reminders
+    SET is_sent = 1, sent_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(reminderId);
+  if (result.changes === 0) {
+    throw new Error(`Reminder with id ${reminderId} not found`);
+  }
+}
+
+export async function createRecurringTask(
+  taskId: number,
+  pattern: string,
+  interval: number,
+  intervalUnit: 'day' | 'week' | 'month' | 'year',
+  startDate: string,
+  endDate: string | null,
+  excludeDates: string[] = []
+): Promise<{ recurringScheduleId: number; taskRunsCreated: number }> {
+  // Create recurring schedule
+  const dbSchedule = db.prepare(`
+    INSERT INTO recurring_schedules (task_id, pattern, interval, interval_unit, start_date, end_date, exclude_dates, next_run)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const now = new Date();
+  const start = new Date(startDate);
+  let excludeJson = '[]';
+  if (excludeDates.length > 0) {
+    excludeJson = JSON.stringify(excludeDates);
+  }
+
+  const scheduleResult = dbSchedule.run(
+    taskId,
+    pattern,
+    interval,
+    intervalUnit,
+    startDate,
+    endDate,
+    excludeJson,
+    start.toISOString()
+  );
+
+  const scheduleId = scheduleResult.lastInsertRowid;
+
+  // Create initial task runs for upcoming occurrences
+  let taskRunsCreated = 0;
+  const createRun = db.prepare(`
+    INSERT INTO task_runs (recurring_schedule_id, task_id, scheduled_date, status)
+    VALUES (?, ?, ?, 'pending')
+  `);
+
+  const oneWeek = 7 * 24 * 60 * 60 * 1000;
+  const currentTime = now.getTime();
+  const startTime = start.getTime();
+  let nextRunDate = new Date(startTime);
+
+  // Generate runs for the next 30 days or until end_date
+  const maxDays = endDate ? Math.ceil((new Date(endDate).getTime() - startTime) / oneWeek) : 4;
+
+  for (let i = 0; i <= maxDays; i++) {
+    const potentialDate = new Date(startTime + i * 7 * 24 * 60 * 60 * 1000); // weekly for now
+    const dateStr = potentialDate.toISOString().split('T')[0];
+
+    // Check if date is in exclude list
+    const excluded = JSON.parse(excludeJson).some((d: string) => d === dateStr);
+    if (excluded) continue;
+
+    // Check if we've passed the end_date
+    if (endDate && new Date(dateStr).getTime() > new Date(endDate).getTime()) break;
+
+    createRun.run(scheduleId, taskId, dateStr);
+    taskRunsCreated++;
+  }
+
+  return { recurringScheduleId: scheduleId, taskRunsCreated };
+}
+
+export async function getRecurringTaskRuns(
+  taskId: number,
+  includeCompleted: boolean = false
+): Promise<Array<{ scheduledDate: string; actualDate: string | null; status: string }>> {
+  const rows = db.prepare(`
+    SELECT scheduled_date, actual_date, status
+    FROM task_runs
+    WHERE task_id = ?
+    ORDER BY scheduled_date ASC
+  `).all(taskId);
+
+  return rows.map(r => ({
+    scheduledDate: r.scheduled_date,
+    actualDate: r.actual_date ? new Date(r.actual_date).toISOString().split('T')[0] : null,
+    status: r.status,
+  }));
+}
+
+export async function markTaskRunCompleted(
+  runId: number,
+  actualDate: string
+): Promise<void> {
+  const result = db.prepare(`
+    UPDATE task_runs
+    SET actual_date = ?, status = 'completed'
+    WHERE id = ?
+  `).run(actualDate, runId);
+
+  if (result.changes === 0) {
+    throw new Error(`Task run with id ${runId} not found`);
+  }
+}
+
+export async function getRecurringSchedule(taskId: number) {
+  return db.prepare(`
+    SELECT * FROM recurring_schedules WHERE task_id = ?
+  `).get(taskId);
+}
+  const task = await taskOperations.getByIdWithDetails(taskId);
+  const dbTimer = db.prepare(`
+    INSERT INTO time_entries (task_id, started_at)
+    VALUES (?, CURRENT_TIMESTAMP)
+  `).run(taskId);
+  return dbTimer.lastInsertRowid;
+}
+
+export async function stopTimer(taskId: number): Promise<number> {
+  const task = await taskOperations.getByIdWithDetails(taskId);
+  const dbTimer = db.prepare(`
+    UPDATE time_entries
+    SET stopped_at = CURRENT_TIMESTAMP, is_running = 0
+    WHERE task_id = ?
+  `).run(taskId);
+  return dbTimer.lastInsertRowid;
+}
+
+export async function getTimerStats(): Promise<Record<string, number>> {
+  const rows = await db.prepare(`
+    SELECT
+      task_id,
+      COUNT(*) AS total_entries,
+      SUM(CASE WHEN is_running = 1 THEN 1 ELSE 0 END) AS running,
+      AVG(CASE WHEN is_running = 1 THEN duration_minutes ELSE 0 END) AS avg_duration
+    FROM time_entries
+    GROUP BY task_id
+  `).all();
+
+  const stats = rows.map(row => ({
+    taskId: row.task_id,
+    totalEntries: row.total_entries,
+    running: row.running,
+    avgDuration: row.avg_duration
+  }));
+
+  return stats;
+}
+
 export async function createTask(data: TaskFormData) {
   const task = taskOperations.create(data)
   revalidatePath("/")
