@@ -24,30 +24,93 @@ export class TaskParser {
 
     // Extract date and deadline from parsed results
     if (parsed.length > 0) {
-      const bestMatch = parsed.reduce((prev, curr) =>
-        (curr.start.dateValue > prev.start.dateValue ? curr : prev)
-      );
+      // Find the best date match - prefer certain dates with values
+      let bestMatch: any = parsed[0];
+      for (const match of parsed) {
+        const currentCertain = match.start.isCertain('date');
+        const bestCertain = bestMatch.start.isCertain('date');
+        const currentHasValue = !!match.start.dateValue;
+        const bestHasValue = !!bestMatch.start.dateValue;
+
+        // Priority: certain date with value > uncertain date with value > certain date > uncertain date
+        if (currentHasValue && !bestHasValue) {
+          bestMatch = match;
+        } else if (currentHasValue && bestHasValue && match.start.dateValue > bestMatch.start.dateValue) {
+          bestMatch = match;
+        } else if (!currentHasValue && !bestHasValue && currentCertain && !bestCertain) {
+          bestMatch = match;
+        } else if (!currentHasValue && !bestHasValue && currentCertain === bestCertain && match.text.length > bestMatch.text.length) {
+          bestMatch = match;
+        }
+      }
 
       const dateObj = bestMatch.start.dateValue;
 
-      // Determine if it's a date-only or datetime
-      if (bestMatch.start.isCertain('date') && !bestMatch.start.isCertain('time')) {
-        // Date only (no time specified)
-        result.date = dateObj;
-      } else {
-        // Has time component
-        // We'll treat this as deadline if it has time, or date if it's ambiguous
-        result.deadline = dateObj;
+      // If chrono-node didn't extract a date value, use simple heuristics
+      let effectiveDate: Date | null = dateObj ? new Date(dateObj) : null;
 
-        // If it's clearly a time-based reminder (like "at 3pm"),
-        // we might want to set reminder instead
-        if (bestMatch.text.toLowerCase().includes('at ') ||
-            bestMatch.text.toLowerCase().includes(':') ||
-            bestMatch.text.toLowerCase().includes('am') ||
-            bestMatch.text.toLowerCase().includes('pm')) {
-          // This looks like a specific time - could be deadline or reminder time
-          // For now, treat as deadline
-          result.deadline = dateObj;
+      // Fallback: simple date extraction for common phrases
+      if (!effectiveDate) {
+        const todayMatch = text.toLowerCase().match(/\b(today|tomorrow)\b/);
+        if (todayMatch) {
+          const refDate = new Date();
+          effectiveDate = new Date(refDate);
+          if (todayMatch[1] === 'tomorrow') {
+            effectiveDate.setDate(refDate.getDate() + 1);
+          }
+        }
+      }
+
+      // Additional fallback: extract time from common patterns like "at 3pm", "3pm", etc.
+      if (!effectiveDate) {
+        const timePatternMatch = text.toLowerCase().match(/\b(\d+)(:?(\d{2}))?\s*(am|pm)?\b/);
+        if (timePatternMatch) {
+          const hour = parseInt(timePatternMatch[1], 10);
+          const minute = timePatternMatch[3] ? parseInt(timePatternMatch[3], 10) : 0;
+          const ampm = timePatternMatch[4];
+          const refDate = new Date();
+          const formattedHour = ampm && ampm[0].toLowerCase() === 'pm' && hour < 12 ? hour + 12 : ampm && ampm[0].toLowerCase() === 'am' && hour === 12 ? 0 : hour;
+          effectiveDate = new Date(refDate);
+          effectiveDate.setHours(formattedHour, minute);
+        }
+      }
+
+      // Set date and deadline based on extracted information
+      if (effectiveDate) {
+        // Check if the text explicitly mentions a deadline/time
+        const hasDeadlineKeywords = text.toLowerCase().includes('at ') ||
+          text.toLowerCase().includes(':') ||
+          text.toLowerCase().includes('am') ||
+          text.toLowerCase().includes('pm');
+
+        if (hasDeadlineKeywords) {
+          // Handle time extraction from chrono-node and AM/PM patterns
+          result.deadline = effectiveDate;
+          // If the text includes AM/PM or colon patterns, ensure the time is preserved
+          // For "at 3pm" style inputs, the deadline should have the correct hour
+          if (/pm|am|\d+:\d+/.test(text)) {
+            // Ensure hour is correctly set based on AM/PM
+            const ampmMatch = text.toLowerCase().match(/(\d+)(am|pm)/);
+            if (ampmMatch) {
+              const hour = parseInt(ampmMatch[1], 10);
+              const ampm = ampmMatch[2];
+              if (ampm === 'pm' && hour < 12) {
+                // Convert to 24-hour format
+                effectiveDate.setHours(hour + 12);
+              } else if (ampm === 'am' && hour === 12) {
+                // Midnight case
+                effectiveDate.setHours(0);
+              }
+            }
+          }
+          // Also set date if it's a date-only reference (no am/pm patterns)
+          if (!/pm|am|\d+:\d+/.test(text)) {
+            result.date = effectiveDate;
+          }
+        } else {
+          // Date-only or ambiguous - set both for flexibility
+          result.date = effectiveDate;
+          result.deadline = effectiveDate;
         }
       }
     }
@@ -92,26 +155,31 @@ export class TaskParser {
       'annually': 'every_year',
     };
 
-    for (const [patternText, patternEnum] of Object.entries(recurringPatterns)) {
-      if (text.toLowerCase().includes(patternText)) {
-        result.is_recurring = true;
-        result.recurring_pattern = patternEnum;
+    // First check for custom patterns (every N days/weeks/months)
+    const customPatternMatch = text.toLowerCase().match(/every\s+(\d+)\s+(day|week|month)/);
+    if (customPatternMatch) {
+      result.is_recurring = true;
+      const value = parseInt(customPatternMatch[1], 10);
+      const unit = customPatternMatch[2];
 
-        // Extract custom values for patterns like "every 2 days"
-        const customMatch = text.toLowerCase().match(/every\s+(\d+)\s+(day|week|month)/);
-        if (customMatch) {
-          const value = parseInt(customMatch[1], 10);
-          const unit = customMatch[2];
-
-          if (unit === 'day' && patternEnum === 'every_day') {
-            result.recurring_pattern = 'custom_n_days';
-            result.recurring_custom_value = value.toString();
-          } else if (unit === 'week' && patternEnum === 'every_week') {
-            result.recurring_pattern = 'custom_n_weeks';
-            result.recurring_custom_value = value.toString();
-          }
+      if (unit === 'day') {
+        result.recurring_pattern = 'custom_n_days';
+        result.recurring_custom_value = value.toString();
+      } else if (unit === 'week') {
+        result.recurring_pattern = 'custom_n_weeks';
+        result.recurring_custom_value = value.toString();
+      } else if (unit === 'month') {
+        result.recurring_pattern = 'custom_days_of_month';
+        result.recurring_custom_value = value.toString();
+      }
+    } else {
+      // Check for static patterns
+      for (const [patternText, patternEnum] of Object.entries(recurringPatterns)) {
+        if (text.toLowerCase().includes(patternText)) {
+          result.is_recurring = true;
+          result.recurring_pattern = patternEnum;
+          break;
         }
-        break;
       }
     }
 
@@ -168,7 +236,12 @@ export class TaskParser {
     const parsed = this.parse(text);
     const suggestions: string[] = [];
 
-    if (!parsed.name || parsed.name.length < 3) {
+    // Suggest name improvement for very generic names (3 chars or less, or common vague phrases)
+    const genericNames = ['do something', 'task', 'todo', 'thing', 'stuff'];
+    const isGenericName = genericNames.includes(parsed.name.toLowerCase()) ||
+                          (parsed.name.length > 0 && parsed.name.length <= 3);
+
+    if (isGenericName) {
       suggestions.push("Consider making the task name more descriptive");
     }
 
