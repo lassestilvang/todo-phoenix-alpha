@@ -1,27 +1,49 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 export function useKeyboardShortcuts(
   shortcuts: Record<string, () => void>,
-  enabled = true
+  options: { enabled?: boolean; preventDefault?: boolean } = {}
 ) {
+  const { enabled = true, preventDefault = false } = options
+  const shortcutsRef = useRef(shortcuts)
+
+  useEffect(() => {
+    shortcutsRef.current = shortcuts
+  }, [shortcuts])
+
   useEffect(() => {
     if (!enabled) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Handle modifier keys (Ctrl/Cmd)
-      const modifier = event.ctrlKey || event.metaKey
-      const key = event.key.toLowerCase()
+      // Skip if typing in an input/textarea/select
+      const target = event.target as HTMLElement
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return
+      }
 
-      // Check for matching shortcut
-      for (const [shortcutKey, handler] of Object.entries(shortcuts)) {
-        const [expectedModifier, expectedKey] = shortcutKey.split("+")
-        const isModifierMatch =
-          (expectedModifier === "ctrl" && modifier) ||
-          (expectedModifier === "cmd" && modifier) ||
-          !expectedModifier
+      const { ctrlKey, shiftKey, altKey, metaKey, key } = event
 
-        if (isModifierMatch && expectedKey === key) {
-          event.preventDefault()
+      for (const [combo, handler] of Object.entries(shortcutsRef.current)) {
+        const parts = combo.toLowerCase().split("+")
+        const expectedKey = parts[parts.length - 1]
+        const expectsCtrl = parts.includes("ctrl")
+        const expectsShift = parts.includes("shift")
+        const expectsAlt = parts.includes("alt")
+        const expectsMeta = parts.includes("cmd") || parts.includes("meta")
+
+        if (
+          key === expectedKey &&
+          ctrlKey === expectsCtrl &&
+          shiftKey === expectsShift &&
+          altKey === expectsAlt &&
+          metaKey === expectsMeta
+        ) {
+          if (preventDefault) event.preventDefault()
           handler()
           return
         }
@@ -32,5 +54,5 @@ export function useKeyboardShortcuts(
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [shortcuts, enabled])
+  }, [enabled, preventDefault])
 }
