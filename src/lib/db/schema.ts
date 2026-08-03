@@ -253,21 +253,27 @@ const timeTrackingSnapshotsTable = db.prepare(`
 timeTrackingSnapshotsTable.run();
 
 // Create indexes for better performance
-const createIndexes = () => {
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_completed ON tasks(is_completed)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_list_id ON tasks(list_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_recurring ON tasks(is_recurring)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_task_id ON task_projects(task_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_project_id ON task_projects(project_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_task_id ON recurring_schedules(task_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_next_run ON recurring_schedules(next_run)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_task_id ON notifications(task_id)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)').run();
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_tracking_snapshots_task_id ON time_tracking_snapshots(task_id)').run();
+// Your existing schema continues...
+    };
+
+    // Add missing indexes
+    const createIndexes = () => {
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_completed ON tasks(is_completed)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_list_id ON tasks(list_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_recurring ON tasks(is_recurring)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_task_id ON task_projects(task_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_project_id ON task_projects(project_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_task_id ON recurring_schedules(task_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_next_run ON recurring_schedules(next_run)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_task_id ON notifications(task_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_time_tracking_snapshots_task_id ON time_tracking_snapshots(task_id)').run();
+    };
 };
 
 createIndexes();
