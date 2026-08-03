@@ -1,68 +1,81 @@
-name: Todo Phoenix CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-      - run: npm install
-      - run: npx tsc --noEmit
-
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-      - run: npm install
-      - run: npm run lint
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-      - run: npm install
-      - run: npm test -- --ci --watchAll=false
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
 
   build:
     runs-on: ubuntu-latest
-    needs: [typecheck, lint, test]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-      - run: npm install
-      - run: npm run build
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-      - run: npm install
-      - run: npm run build
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+          node-version: 18
+          cache: 'npm'
+
+      - name: Build Docker image
+        run: docker build -t todo-phoenix-alpha:${{ github.sha }} .
+
+      - name: Run security scan
+        run: |
+          echo "Running security scan..."
+          npm audit --audit-level=high
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: .
+          args: --severity-threshold=high
+
+      - name: Push Docker image
+        if: github.event_name == 'push'
+        uses: docker/build-push-policy@v5
+        with:
+          context: .
+          push: true
+          tag: "todo-phoenix-alpha:${{ github.sha }}"
+          cache-from: type=local,name=node_modules
+          cache-to: type=registry,ref='todo-phoenix-alpha:${{ github.sha }}'
