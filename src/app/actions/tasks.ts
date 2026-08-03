@@ -1,8 +1,9 @@
-"use server"
+// "use server"
 
 import { revalidatePath } from "next/cache"
+import db from "@/lib/db/schema"
 import { listOperations, taskOperations, labelOperations, subtaskOperations, timeEntryOperations, reminderOperations, attachmentOperations } from "@/lib/db"
-import type { TaskFormData, SubtaskFormData, Task } from "@/lib/types"
+import type { TaskFormData, SubtaskFormData, Task, Reminder } from "@/lib/types"
 
 // NLP Parser import (would be implemented separately)
 type ParsedTaskData = Partial<TaskFormData>
@@ -115,7 +116,7 @@ export async function createReminder(taskId: number, reminderTime: Date): Promis
 }
 
 export async function getPendingReminders(): Promise<Reminder[]> {
-  const now = new Date().toISOString();
+  const now = new Date().toISOString()
   const pendingReminders = db.prepare(`
     SELECT * FROM reminders
     WHERE is_sent = 0 AND time <= ?
@@ -247,13 +248,6 @@ export async function getRecurringSchedule(taskId: number) {
   return db.prepare(`
     SELECT * FROM recurring_schedules WHERE task_id = ?
   `).get(taskId);
-}
-  const task = await taskOperations.getByIdWithDetails(taskId);
-  const dbTimer = db.prepare(`
-    INSERT INTO time_entries (task_id, started_at)
-    VALUES (?, CURRENT_TIMESTAMP)
-  `).run(taskId);
-  return dbTimer.lastInsertRowid;
 }
 
 export async function stopTimer(taskId: number): Promise<number> {
@@ -400,14 +394,13 @@ export async function createTaskFromNLP(text: string, listId: number): Promise<T
 
   const task = taskOperations.create(taskData);
 
-  // Create reminder if was detected in text
+  // Create reminder if deadline was detected in text
   if (taskOperations.getById(task.id)?.deadline) {
     const taskWithDetails = taskOperations.getByIdWithDetails(task.id);
     if (taskWithDetails?.deadline) {
       try {
         reminderOperations.create(task.id, new Date(taskWithDetails.deadline));
       } catch (e) {
-        // Reminder creation failed, but task was created
         console.error('Failed to create reminder:', e);
       }
     }
@@ -423,18 +416,15 @@ export async function getTaskSuggestions(taskId: number): Promise<{
   estimatedMinutes: number;
   relatedTasks: number[];
 }> {
-  const task = taskOperations.getByIdWithDetails(taskId);
+  const task = taskOperations.getByIdWithDetails(taskId)
   if (!task) throw new Error('Task not found');
 
-  // Basic AI-like suggestions based on task properties
-  // In production, this would call Claude API
   const suggestions = {
     priority: task.priority,
     estimatedMinutes: task.estimate_minutes,
     relatedTasks: [] as number[],
   };
 
-  // Find related tasks based on labels
   if ((task as any).labels && (task as any).labels.length > 0) {
     const allTasks = taskOperations.getAll();
     for (const label of (task as any).labels) {
@@ -448,7 +438,6 @@ export async function getTaskSuggestions(taskId: number): Promise<{
     suggestions.relatedTasks = [...new Set(suggestions.relatedTasks)];
   }
 
-  // Suggest priority based on deadline proximity
   if (task.deadline) {
     const deadline = new Date(task.deadline);
     const now = new Date();
@@ -472,19 +461,184 @@ export async function addAttachmentToTask(
   fileType: string,
   fileData: string
 ): Promise<{ id: number; filename: string; fileType: string; url: string }> {
-  const attachment = attachmentOperations.create(taskId, filename, fileType, fileData);
+  const attachment = db.prepare(`
+    INSERT INTO attachments (task_id, filename, file_type, file_data)
+    VALUES (?, ?, ?, ?)
+  `).run(taskId, filename, fileType, fileData);
 
   revalidatePath("/")
   return {
-    id: attachment.id,
-    filename: attachment.filename,
-    fileType: attachment.file_type,
-    url: `/uploads/${attachment.filename}`,
+    id: Number(attachment.lastInsertRowid),
+    filename,
+    fileType,
+    url: `/uploads/${filename}`,
   };
 }
 
 // NEW: Get pending reminders (for notifications)
-export async function getPendingReminders(): Promise<any[]> {
-  const now = new Date();
-  return reminderOperations.getPendingReminders(now);
+export async function exportDatabaseAsJson(): Promise<{ backupId: number; filePath: string }> {
+  const backupPath = await createBackup('full', 'Database backup', 0);
+  return {
+    backupId: Number(backupPath.split('-').pop().split('.')[0]),
+    filePath: backupPath,
+  };
 }
+
+// Backup actions
+export async function createBackup(description: string = 'Manual backup'): Promise<string> {
+  const fs = require('fs')
+  const path = require('path')
+  const crypto = require('crypto')
+  const dbPath = path.join(process.cwd(), 'data', 'planner.db')
+  const backupDir = path.join(process.cwd(), 'data', 'backups')
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true })
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = path.join(backupDir, `backup-${timestamp}.db`)
+
+  // Copy the database file
+  fs.copyFileSync(dbPath, backupPath)
+
+  // Calculate checksum
+  const fileBuffer = fs.readFileSync(backupPath)
+  const checksum = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+  const fileSize = fileBuffer.length
+
+  // Record backup in database
+  db.prepare(`
+    INSERT INTO db_backups (backup_type, file_path, file_size, checksum, description)
+    VALUES ('full', ?, ?, ?, ?)
+  `).run(backupPath, fileSize, checksum, description)
+
+  return backupPath
+}
+
+export async function listBackups() {
+  return db.prepare(`
+    SELECT * FROM db_backups ORDER BY created_at DESC
+  `).all()
+}
+
+// External integrations
+export async function addGoogleCalendarEvent(
+  taskId: number,
+  summary: string,
+  description: string | null,
+  start: Date,
+  end: Date
+): Promise<{ eventId: string }> {
+  // This is a placeholder for Google Calendar integration
+  // In production, this would use OAuth2 credentials and the Google Calendar API
+  db.prepare(`
+    INSERT INTO external_integrations (task_id, provider, external_id, sync_status, last_synced_at)
+    VALUES (?, 'google_calendar', ?, 'pending', ?)
+  `).run(
+    taskId,
+    summary,
+    new Date().toISOString()
+  )
+
+  return { eventId: summary }
+}
+
+export async function addSlackNotification(
+  taskId: number,
+  message: string
+): Promise<{ messageId: string }> {
+  // Placeholder for Slack integration
+  // In production, this would use Slack webhook or API
+  db.prepare(`
+    INSERT INTO notifications (task_id, type, title, message, sent_at)
+    VALUES (?, 'system', 'Slack Notification', ?, ?)
+  `).run(
+    taskId,
+    message,
+    new Date().toISOString()
+  )
+
+  return { messageId: message }
+}
+
+export async function scheduleEmailReminder(
+  taskId: number,
+  email: string,
+  message: string,
+  sendAt: Date
+): Promise<{ scheduledId: number }> {
+  // Create a reminder for email delivery
+  const result = db.prepare(`
+    INSERT INTO reminders (task_id, time, is_sent)
+    VALUES (?, ?, 0)
+  `).run(taskId, sendAt.toISOString())
+
+  db.prepare(`
+    INSERT INTO notifications (task_id, type, title, message, sent_at)
+    VALUES (?, 'reminder', ?, ?)
+  `).run(taskId, email, message, new Date().toISOString())
+
+  return { scheduledId: Number(result.lastInsertRowid) }
+}
+
+// External integrations
+export async function getExternalIntegrations(taskId?: number) {
+  if (taskId) {
+    return db.prepare(`
+      SELECT * FROM external_integrations WHERE task_id = ? ORDER BY created_at DESC
+    `).all(taskId)
+  }
+  return db.prepare(`
+    SELECT * FROM external_integrations ORDER BY created_at DESC LIMIT 100
+  `).all()
+}
+
+export async function deleteExternalIntegration(integrationId: number) {
+  const result = db.prepare(`
+    DELETE FROM external_integrations WHERE id = ?
+  `).run(integrationId)
+  return result.changes
+}
+
+// NLP / Voice input actions
+export async function createTaskFromVoice(text: string, listId: number): Promise<Task> {
+  // Use enhanced NLP parser with voice corrections
+  const parsed = await parseNaturalLanguage(text);
+  const taskData: TaskFormData = {
+    ...parsed,
+    name: parsed.name || 'Untitled Voice Task',
+    list_id: listId,
+  };
+
+  const task = taskOperations.create(taskData);
+  revalidatePath("/")
+  return task
+}
+
+// Smart templates
+export async function getSmartTemplates(listId?: number): Promise<any[]> {
+  if (listId) {
+    return db.prepare(`
+      SELECT * FROM templates WHERE list_id = ? OR list_id IS NULL ORDER BY created_at DESC
+    `).all(listId);
+  }
+  return db.prepare(`
+    SELECT * FROM templates ORDER BY created_at DESC
+  `).all();
+}
+
+export async function createTemplate(
+  name: string,
+  description: string | null,
+  listId: number | null,
+  templateData: string
+): Promise<{ id: number; name: string }> {
+  const result = db.prepare(`
+    INSERT INTO templates (name, description, list_id, template_data)
+    VALUES (?, ?, ?, ?)
+  `).run(name, description, listId, templateData);
+
+  return {
+    id: Number(result.lastInsertRowid),
+    name,
+  };}
