@@ -26,7 +26,6 @@ import {
   DndContext,
   closestCenter,
   KeyboardCode,
-  PointerDevice,
   DragEndEvent,
   DragStartEvent,
 } from "@dnd-kit/core"
@@ -36,7 +35,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
-import { useSortable } from "@dnd-kit/react"
+import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { TaskDetailModal } from "./task-detail-modal"
 
