@@ -298,7 +298,7 @@ export function TaskDetailModal({
                   }}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Max 5 attachments per task, files under 10MB
+                  Max 10 attachments per task, files under 10MB
                 </p>
               </div>
             )}
