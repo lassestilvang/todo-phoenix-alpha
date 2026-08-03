@@ -1,18 +1,19 @@
-"use client"
-
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TaskList } from "@/components/tasks/task-list"
 import { TaskFormDialog } from "@/components/tasks/task-form-dialog"
-import { 
+import {
   getLists, getTasks, getTasksByListId, getTasksByDate,
   getTasksByDateRange, getUpcomingTasks, getOverdueTasks,
   getLabels, createTask, toggleTaskComplete, deleteTask,
-  updateTask, createList, createLabel, getTaskById
+  updateTask, createList, createLabel, getTaskById,
+  getPendingReminders
 } from "@/app/actions/tasks"
 import type { Task, List, Label, TaskWithDetails, TaskFormData, RecurringPattern } from "@/lib/types"
 import { format } from "date-fns"
+import { toast } from "sonner"
+import { useKeyboardShortcuts } from "@/lib/hooks/use-keyboard-shortcuts"
 
 export default function DashboardPage() {
   const searchParams = useSearchParams()
@@ -93,17 +94,55 @@ export default function DashboardPage() {
     loadData()
   }, [loadData])
 
+  // Check for overdue tasks
   useEffect(() => {
-    // Check for overdue tasks
     const checkOverdue = async () => {
       const overdue = await getOverdueTasks(new Date().toISOString())
       setOverdueCount(overdue.length)
     }
     checkOverdue()
-    // Check every minute
     const interval = setInterval(checkOverdue, 60000)
     return () => clearInterval(interval)
   }, [])
+
+  // Check for pending reminders every 30 seconds
+  // Check for pending reminders every 30 seconds
+  useEffect(() => {
+    const checkReminders = async () => {
+      try {
+        const pending = await getPendingReminders()
+        for (const reminder of pending) {
+          if (!reminder.notified) {
+            toast.warning(`Reminder: ${reminder.task?.name || 'Task'}`, {
+              description: `Due at ${new Date(reminder.time).toLocaleTimeString()}`,
+              action: {
+                label: "View",
+                onClick: () => {
+                  // Focus the task - could navigate or highlight
+                }
+              }
+            })
+            // Mark as notified to avoid duplicate toasts
+            reminder.notified = true
+          }
+        }
+      } catch (error) {
+        console.error("Failed to check reminders:", error)
+      }
+    }
+    checkReminders()
+    const interval = setInterval(checkReminders, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Register global keyboard shortcuts
+  useKeyboardShortcuts(
+    {
+      "ctrl+n": handleNewTask,
+      "escape": handleEscape,
+    },
+    { enabled: true, preventDefault: true }
+  )
 
   const handleToggleComplete = async (taskId: number) => {
     await toggleTaskComplete(taskId)
