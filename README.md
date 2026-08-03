@@ -160,6 +160,62 @@ The project uses:
 - [ ] Export/Import functionality
 - [ ] Mobile app version
 
+## Deployment
+
+### Docker
+
+```bash
+# Build the Docker image
+docker build -t todo-phoenix-alpha .
+
+# Run the container
+docker run -p 3000:3000 -v $PWD/data:/app/data todo-phoenix-alpha
+```
+
+### Development
+
+```bash
+# Install dependencies
+bun install
+
+# Run development server
+bun run dev
+
+# Run tests
+bun test
+
+# Run lint
+bun run lint
+```
+
+### Environment Variables
+
+Create a `.env` file with:
+
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+## Backup & Export
+
+### Export Database as JSON
+
+```bash
+# Via API endpoint or manually trigger
+exportDatabaseAsJson()
+```
+
+This will create a backup file in `data/backups/` with format `backup-YYYYMMDD-HHMMSS.db` and record it in the `db_backups` table.
+
+### Restore from Backup
+
+```bash
+# Copy the backup file to the data directory
+cp /path/to/backup-file.db data/backups/
+
+# The application will automatically detect and use the latest backup
+```
+
 ## License
 
 MIT
