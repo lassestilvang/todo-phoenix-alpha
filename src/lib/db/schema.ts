@@ -34,6 +34,7 @@ db.exec(`
     is_recurring INTEGER DEFAULT 0,
     recurring_pattern TEXT,
     recurring_custom_value TEXT,
+    dependencies JSON DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
@@ -250,11 +251,6 @@ const timeTrackingSnapshotsTable = db.prepare(`
   );
 `);
 
-timeTrackingSnapshotsTable.run();
-
-// Create indexes for better performance
-// Your existing schema continues...
-    };
 
     // Add missing indexes
     const createIndexes = () => {
@@ -264,6 +260,7 @@ timeTrackingSnapshotsTable.run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_list_id ON tasks(list_id)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_recurring ON tasks(is_recurring)').run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_dependencies ON tasks(dependencies)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_task_id ON task_projects(task_id)').run();
@@ -274,7 +271,6 @@ timeTrackingSnapshotsTable.run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)').run();
       db.prepare('CREATE INDEX IF NOT EXISTS idx_time_tracking_snapshots_task_id ON time_tracking_snapshots(task_id)').run();
     };
-};
 
 createIndexes();
 
