@@ -4,44 +4,18 @@ import { revalidatePath } from "next/cache"
 import db from "@/lib/db/schema"
 import { listOperations, taskOperations, labelOperations, subtaskOperations, timeEntryOperations, reminderOperations, attachmentOperations } from "@/lib/db"
 import type { TaskFormData, SubtaskFormData, Task, Reminder } from "@/lib/types"
+import { TaskParser } from "@/lib/nlp/task-parser"
+import { generateTaskSuggestions, generateInsights } from "@/lib/ai/enhancement"
 
-// NLP Parser import (would be implemented separately)
 type ParsedTaskData = Partial<TaskFormData>
 
-/**
- * Simple NLP parser interface
- * In production, this would use the TaskParser from lib/nlp/task-parser.ts
- */
+// Use enhanced NLP parser
 async function parseNaturalLanguage(text: string): Promise<ParsedTaskData> {
-  // This is a placeholder - in production, use the TaskParser from NLP module
-  // For now, we'll do simple regex-based extraction
-  if (!text) return { name: text, description: text };
+  return TaskParser.parse(text);
+}
 
-  // Extract time
-  const timeMatch = text.match(/(\d{1,2}:\d{2}(?:\s*(?:am|pm))?)/i);
-  // Extract date
-  const dateMatch = text.match(/(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
-  // Extract priority
-  const priorityMatch = text.match(/\b(high|medium|low)\b/i);
-  // Extract time estimate
-  const estimateMatch = text.match(/\b(\d+)\s*(h|hr|hrs|hours?|m|min|mins?|minutes?)\b/i);
-
-  const result: ParsedTaskData = {
-    name: text.length > 50 ? text.substring(0, 47) + '...' : text,
-    description: text,
-  };
-
-  if (priorityMatch) {
-    result.priority = priorityMatch[1].toLowerCase() as any;
-  }
-
-  if (estimateMatch) {
-    const value = parseInt(estimateMatch[1], 10);
-    const unit = estimateMatch[2].toLowerCase();
-    result.estimate_minutes = unit.startsWith('h') ? value * 60 : value;
-  }
-
-  return result;
+async function getTaskImprovementSuggestions(text: string): Promise<string> {
+  return TaskParser.generateEnhancedSuggestions(text);
 }
 
 // List actions
@@ -450,6 +424,31 @@ export async function getTaskSuggestions(taskId: number): Promise<{
     }
   }
 
+  // NEW: Enhance suggestions with AI-powered insights
+  try {
+    const aiResponse = await generateTaskSuggestions({
+      priority: task.priority,
+      estimate_minutes: task.estimate_minutes,
+      date: task.deadline
+    });
+
+    if (aiResponse.priority !== 'none') {
+      suggestions.priority = aiResponse.priority;
+    }
+
+    if (aiResponse.suggestedTimeEstimate > 0) {
+      suggestions.estimatedMinutes = aiResponse.suggestedTimeEstimate;
+    }
+
+    // Only add related tasks if we have AI suggestions
+    if (aiResponse.relatedTasks.length > 0) {
+      suggestions.relatedTasks = aiResponse.relatedTasks;
+    }
+  } catch (error) {
+    console.error('Error enhancing suggestions with AI:', error);
+    // Continue with basic suggestions if AI fails
+  }
+
   revalidatePath("/")
   return suggestions;
 }
@@ -641,4 +640,167 @@ export async function createTemplate(
   return {
     id: Number(result.lastInsertRowid),
     name,
-  };}
+  };
+}
+
+// Dependency management actions
+
+/**
+ * Get all dependencies for a task
+ */
+export async function getTaskDependencies(taskId: number): Promise<number[]> {
+  const task = taskOperations.getById(taskId);
+  if (!task || !task.dependencies) return [];
+
+  try {
+    return JSON.parse(task.dependencies) as number[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Add a dependency to a task
+ */
+export async function addTaskDependency(taskId: number, dependsOnTaskId: number): Promise<void> {
+  if (taskId === dependsOnTaskId) {
+    throw new Error('A task cannot depend on itself');
+  }
+
+  // Check if dependency already exists
+  const existingDeps = await getTaskDependencies(taskId);
+  if (existingDeps.includes(dependsOnTaskId)) {
+    return; // Already exists
+  }
+
+  // Check for circular dependency
+  if (wouldCreateCircularDependency(taskId, dependsOnTaskId)) {
+    throw new Error('Adding this dependency would create a circular dependency');
+  }
+
+  const updatedDeps = [...existingDeps, dependsOnTaskId];
+
+  db.prepare(`
+    UPDATE tasks
+    SET dependencies = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JSON.stringify(updatedDeps), taskId);
+
+  revalidatePath("/");
+}
+
+/**
+ * Remove a dependency from a task
+ */
+export async function removeTaskDependency(taskId: number, dependsOnTaskId: number): Promise<void> {
+  const existingDeps = await getTaskDependencies(taskId);
+  const updatedDeps = existingDeps.filter(id => id !== dependsOnTaskId);
+
+  db.prepare(`
+    UPDATE tasks
+    SET dependencies = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JSON.stringify(updatedDeps), taskId);
+
+  revalidatePath("/");
+}
+
+/**
+ * Check if adding a dependency would create a circular reference
+ */
+function wouldCreateCircularDependency(taskId: number, dependsOnTaskId: number): boolean {
+  // Use DFS to check if dependsOnTaskId eventually depends on taskId
+  const visited = new Set<number>();
+  const stack = [dependsOnTaskId];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === taskId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const task = taskOperations.getById(current);
+    if (task && task.dependencies) {
+      try {
+        const deps = JSON.parse(task.dependencies) as number[];
+        stack.push(...deps);
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get all tasks that depend on a given task (reverse dependencies)
+ */
+export async function getDependentTasks(taskId: number): Promise<number[]> {
+  const allTasks = taskOperations.getAll();
+  const dependents: number[] = [];
+
+  for (const task of allTasks) {
+    if (task.dependencies) {
+      try {
+        const deps = JSON.parse(task.dependencies) as number[];
+        if (deps.includes(taskId)) {
+          dependents.push(task.id);
+        }
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+  }
+
+  return dependents;
+}
+
+/**
+ * Get dependency chain for a task (all upstream dependencies)
+ */
+export async function getDependencyChain(taskId: number): Promise<number[]> {
+  const chain: number[] = [];
+  const visited = new Set<number>();
+  const stack = [taskId];
+
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const task = taskOperations.getById(current);
+    if (task && task.dependencies) {
+      try {
+        const deps = JSON.parse(task.dependencies) as number[];
+        for (const dep of deps) {
+          if (!chain.includes(dep)) {
+            chain.push(dep);
+          }
+          stack.push(dep);
+        }
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+  }
+
+  return chain;
+}
+
+/**
+ * Validate that all dependencies exist
+ */
+export async function validateDependencies(taskId: number): Promise<{ valid: boolean; missing: number[] }> {
+  const deps = await getTaskDependencies(taskId);
+  const missing: number[] = [];
+
+  for (const depId of deps) {
+    const task = taskOperations.getById(depId);
+    if (!task) {
+      missing.push(depId);
+    }
+  }
+
+  return { valid: missing.length === 0, missing };
+}
