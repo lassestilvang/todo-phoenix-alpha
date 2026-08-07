@@ -1,0 +1,229 @@
+generator client {
+  provider "postgresql"
+  output ../src/generated/prisma
+}
+
+// Base models for the system
+
+model User {
+  id String @id @default(uuid())
+  name String?
+  email String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Tasks assigned to this user
+  tasks Task[]
+
+  // Managed agents (if applicable)
+  managedAgents Agent[]
+}
+
+model Agent {
+  id String @id @default(uuid())
+  name String
+  version String @default("1.0.0")
+  workField String  // creative, analysis, coding, etc.
+  capabilities Json  // JSON object of capabilities
+
+  // Agent status and metrics
+  availabilityScore Float
+  focusLevel Float
+  energyLevel Float
+  currentTaskId String? // FK to current task
+  currentPhase String?  // idle, deep_work, interrupt_handling, paused, etc.
+
+  // Timestamps
+  totalTasksCompleted Int @default(0)
+  successfulTasks Int @default(0)
+  failedTasks Int @default(0)
+  avgCompletionTime Float @default(0)
+  lastSeen DateTime @default(now())
+
+  // Relationships
+  assignedTasks Assignment[]
+  createdBy User?  // User who registered this agent
+
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id String @id @default(uuid())
+  description String
+  priority Int  // 1-10 scale
+  status TaskStatus @default(pending)
+
+  // Metadata
+  descriptionText String?
+  tags String[] @default([])
+
+  // Deadline and timing
+  deadline DateTime? // Nullable - optional deadline
+  createdAt DateTime @default(now())
+  startedAt DateTime? // When task was started
+  completedAt DateTime? // When task was completed
+
+  // Agent relationships
+  assignedAgentId String? // FK to Agent
+  createdBy User? // FK to User who created the task
+
+  // Task lifecycle data
+  estimatedDuration Float? // Estimated duration in minutes
+  actualDuration Float? // Actual duration in minutes
+
+  // Dependencies and context
+  dependencies Task[] @relation(name: "TaskDependencies", references: [id])
+  parentTaskId String? // For subtasks, references Task.id
+  allowedContexts String[] @default([])  // Contexts where task can be executed
+
+  // Conflicts and resource tracking
+  conflictCount Int @default(0)
+  resourceId String? // FK to resource being used
+
+  // Relationships
+  agent Agent? @relation(fields: [assignedAgentId], references: [id])
+  parent Task? @relation(name: "TaskDependencies", fields: [parentTaskId], references: [id])
+  subtasks Task[] @relation(name: "TaskDependencies", references: [parentTaskId])
+  user User? @relation(fields: [createdBy], references: [id])
+
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+model Assignment {
+  id String @id @default(uuid())
+
+  // Relationships
+  taskId String
+  agentId String
+  assignedAt DateTime @default(now())
+  completedAt DateTime?
+
+  // Assignment metadata
+  priorityAtAssignment Int
+  status AssignmentStatus @default(pending)  // pending, in_progress, completed, failed
+
+  // Performance metrics
+  durationMs Int? // Time taken to complete in ms
+  errorMessage String?
+
+  // Relationships
+  task Task @relation(fields: [taskId], references: [id])
+  agent Agent @relation(fields: [agentId], references: [id])
+
+  @@unique([taskId, agentId])
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+  failed
+}
+
+enum AssignmentStatus {
+  pending
+  in_progress
+  completed
+  failed
+}
+
+model Backup {
+  id String @id @default(uuid())
+  filename String
+  filePath String
+  checksum String
+  sizeBytes Int
+  format String? // e.g., .db, .json, .csv
+  createdAt DateTime @default(now())
+
+  // Relationships
+  createdBy User? @relation(fields: [createdBy], references: [id])
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+model Attachment {
+  id String @id @default(uuid())
+  taskId String
+  filename String
+  originalName String
+  storagePath String  // S3 path or local path
+  mimeType String
+  sizeBytes Int
+  uploadedAt DateTime @default(now())
+  sentToAgentId String? // FK to agent that received attachment
+
+  // Relationships
+  task Task @relation(fields: [taskId], references: [id])
+  sentToAgent Agent? @relation(fields: [sentToAgentId], references: [id])
+
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================================
+// NEW MODELS FOR PATTERN MINING AND SCHEDULING
+// =============================================================
+
+model RecurringPattern {
+  id String @id @default(uuid())
+  type PatternType @default(Daily)
+  interval Int @default(1) // Every 1 day, 2 weeks, etc.
+
+  // Timing constraints
+  dayOfWeek Int[]  // For weekly: 0-6 (Sunday = 0)
+  dayOfMonth Int   // For monthly: 1-31
+  hourOfDay Int @default(9)   // 0-23
+  minuteOfHour Int @default(0) // 0-59
+
+  // Metadata
+  description String
+  confidence Float @default(1.0) // 0-1, derived from mining
+  createdAt DateTime @default(now())
+  lastMatchedAt DateTime?
+
+  // Count for statistics
+  timesExecuted Int @default(0)
+  timesResolved Int @default(0)
+
+  @@index([type, hourOfDay, minuteOfHour])
+  @@updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+enum PatternType {
+  Hourly
+  Daily
+  Weekly
+  Monthly
+}
+
+model TaskRegistry {
+  id String @id @default(uuid())
+  taskId String @unique
+  patternId String?
+
+  // Execution tracking
+  lastExecutedAt DateTime?
+  nextScheduledAt DateTime?
+  executionCount Int @default(0)
+  errorCount Int @default(0)
+
+  // Conflict resolution
+  lastConflictId String?
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  task Task @relation(fields: [taskId], references: [id])
+  pattern RecurringPattern @relation(fields: [patternId], references: [id])
+
+  @@index([nextScheduledAt])
+  @@index([lastExecutedAt])
+}
