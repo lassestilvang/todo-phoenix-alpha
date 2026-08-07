@@ -1,0 +1,444 @@
+openapi: 3.0.3
+info:
+  title: TodoPhoenixAlpha API
+  description: Multi-agent task management system with distributed coordination
+  version: '1.0.0'
+  contact:
+    name: Lasse Stilvang
+    email: lassse@example.com
+  servers:
+    - url: http://localhost:3000
+      description: Development server
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      description: Returns service health status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/agents:
+    get:
+      summary: Get agent overview
+      description: Retrieve status of all registered agents or filter by agentId
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [overview, status, available, task_assign, task_complete, environment]
+      responses:
+        '200':
+          description: Agent overview or status JSON
+    post:
+      summary: Agent actions
+      description: Register, update heartbeat, assign tasks, etc.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentAction'
+      responses:
+        '200':
+          description: Action result
+
+  /api/agents/{agentId}:
+    get:
+      summary: Get agent details by ID
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent details
+        '404':
+          description: Agent not found
+
+  /api/debug:
+    get:
+      summary: Debug metrics endpoint
+      description: Return system and agent metrics for debugging
+      parameters:
+        - name: metric
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [system, agents, tasks, orchestrator, all]
+      responses:
+        '200':
+          description: Debug metrics
+
+  /api/conflicts:
+    get:
+      summary: Get conflicts
+      description: Retrieve all conflicts (active, history, statistics)
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, history, statistics, all]
+      responses:
+        '200':
+          description: Conflicts list or statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictResponse'
+    post:
+      summary: Report or manage conflicts
+      description: Report a new conflict, resolve, or escalate an existing conflict
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConflictAction'
+        responses:
+        '200':
+          description: Action result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictResponse'
+
+  /api/scheduler:
+    get:
+      summary: Get scheduler status
+      description: Get all scheduled tasks and current scheduler state
+      responses:
+        '200':
+          description: Scheduler status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulerStatus'
+    post:
+      summary: Schedule a task
+      description: Add a task to the scheduler queue for execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduledTask'
+      responses:
+        '200':
+          description: Task scheduled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledTaskResponse'
+
+  /api/tasks:
+    get:
+      summary: Get tasks
+      description: Retrieve all tasks, optionally filtered by status or userId
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+      responses:
+        '200':
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+    post:
+      summary: Create a new task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Task'
+      responses:
+        '200':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    AgentAction:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [register, update_heartbeat, assign_task, complete_task, broadcast_status, discovery, start_work, phase_register]
+        agentId:
+          type: string
+        taskId:
+          type: string
+        phase:
+          type: string
+        priority:
+          type: integer
+
+    TaskStatus:
+      type: string
+      enum: [pending, in_progress, completed, failed]
+      description: 'Task status enumeration'
+
+    Task:
+      type: object
+      required:
+        - description
+        - priority
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        allowedContexts:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        deadline:
+          type: string
+          format: date-time
+        estimatedDuration:
+          type: number
+          description: Estimated duration in minutes
+        actualDuration:
+          type: number
+          description: Actual duration in minutes
+
+    ConflictAction:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum: [report, resolve, escalate]
+        participants:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        conflictId:
+          type: string
+        strategy:
+          type: string
+          enum: [LOCK_WINNER, CONTEXT_MERGE, PRIORITY_ESCALATION, TIMESTAMP_ORDERING, CONSENSUS, EXTERNAL_INTERVENTION]
+
+    ConflictEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        status:
+          type: string
+        detectedAt:
+          type: integer
+        resolvedAt:
+          type: integer
+        participants:
+          type: array
+          items:
+            type: string
+        resolution:
+          $ref: '#/components/schemas/Resolution'
+
+    ConflictResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConflictEvent'
+        count:
+          type: integer
+        statistics:
+          $ref: '#/components/schemas/ConflictStatistics'
+        timestamp:
+          type: integer
+
+    ConflictStatistics:
+      type: object
+      properties:
+        totalConflicts:
+          type: integer
+        totalResolutions:
+          type: integer
+        avgResolutionTimeMs:
+          type: number
+        successfulResolutions:
+          type: integer
+
+    Resolution:
+      type: object
+      properties:
+        strategy:
+          type: string
+        outcome:
+          type: string
+        winner:
+          type: string
+        mergedData:
+          type: object
+          additionalProperties:
+            type: object
+
+    ScheduledTask:
+      type: object
+      required:
+        - description
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+        requiredCapabilities:
+          type: array
+          items:
+            type: string
+        recurrence:
+          $ref: '#/components/schemas/Recurrence'
+        delayMs:
+          type: integer
+        maxExecutions:
+          type: integer
+        expiresAt:
+          type: integer
+
+    Recurrence:
+      type: object
+      properties:
+        pattern:
+          type: string
+          enum: [hourly, daily, weekly, monthly]
+        interval:
+          type: integer
+        daysOfWeek:
+          type: array
+          items:
+            type: integer
+        dayOfMonth:
+          type: integer
+
+    ScheduledTaskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        taskId:
+          type: string
+        message:
+          type: string
+
+    SchedulerStatus:
+      type: object
+      properties:
+        scheduledTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledTask'
+        runningTasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledTask'
+        isRunning:
+          type: boolean
+        scheduledTasksCount:
+          type: integer
+        runningTasksCount:
+          type: integer
+
+    TaskMetric:
+      type: object
+      properties:
+        taskId:
+          type: string
+        agentId:
+          type: string
+        startedAt:
+          type: integer
+        endedAt:
+          type: integer
+        durationMs:
+          type: integer
+        success:
+          type: boolean
+        error:
+          type: string
+        priority:
+          type: integer
+
+    AgentMetric:
+      type: object
+      properties:
+        agentId:
+          type: string
+        totalTasks:
+          type: integer
+        successfulTasks:
+          type: integer
+        failedTasks:
+          type: integer
+        averageDurationMs:
+          type: integer
+        lastSeen:
+          type: integer
+
+tags:
+  - name: Agents
+  - name: Tasks
+  - name: Conflicts
+  - name: Scheduler
+  - name: Debug
+  - name: Health
