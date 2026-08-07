@@ -1,4 +1,17 @@
 import { expect, describe, it, vi, beforeEach } from 'vitest'
+
+// Mock better-sqlite3 to avoid Bun compatibility issue
+vi.mock('better-sqlite3', () => {
+  return vi.fn().mockImplementation(() => ({
+    pragma: vi.fn(),
+    exec: vi.fn(),
+    prepare: vi.fn().mockReturnThis(),
+    run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+    all: vi.fn().mockReturnValue([]),
+    get: vi.fn().mockReturnValue({ id: 1 }),
+  }))
+})
+
 import { getAnalyticsData } from '../../app/actions/analytics'
 
 // Mock the database functions
