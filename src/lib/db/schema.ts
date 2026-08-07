@@ -151,54 +151,6 @@ if (!inboxExists) {
   `).run();
 }
 
-// Create projects table for hierarchical organization
-const projectsTable = db.prepare(`
-  CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    color TEXT NOT NULL DEFAULT '#3b82f6',
-    emoji TEXT NOT NULL DEFAULT '📁',
-    description TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
-
-projectsTable.run();
-
-// Create task_projects table for many-to-many relationship
-const taskProjectsTable = db.prepare(`
-  CREATE TABLE IF NOT EXISTS task_projects (
-    task_id INTEGER NOT NULL,
-    project_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (task_id, project_id),
-    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-  );
-`);
-
-taskProjectsTable.run();
-
-// Create recurring_schedules table for recurring tasks
-const recurringSchedulesTable = db.prepare(`
-  CREATE TABLE IF NOT EXISTS recurring_schedules (
-    task_id INTEGER NOT NULL PRIMARY KEY,
-    pattern TEXT NOT NULL,
-    interval INTEGER NOT NULL DEFAULT 1,
-    interval_unit TEXT NOT NULL DEFAULT 'day',
-    start_date DATE,
-    end_date DATE,
-    exclude_dates TEXT, -- JSON array of excluded dates
-    next_run DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-  );
-`);
-
-recurringSchedulesTable.run();
-
 // Create task_runs table to track generated instances of recurring tasks
 const taskRunsTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS task_runs (
@@ -251,28 +203,7 @@ const timeTrackingSnapshotsTable = db.prepare(`
   );
 `);
 
-
-    // Add missing indexes
-    const createIndexes = () => {
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_completed ON tasks(is_completed)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_list_id ON tasks(list_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_is_recurring ON tasks(is_recurring)').run();
-    db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_dependencies ON tasks(dependencies)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_task_id ON task_projects(task_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_project_id ON task_projects(project_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_task_id ON recurring_schedules(task_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_next_run ON recurring_schedules(next_run)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_task_id ON notifications(task_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_time_tracking_snapshots_task_id ON time_tracking_snapshots(task_id)').run();
-    };
-
-createIndexes();
+timeTrackingSnapshotsTable.run();
 
 // Backup table for automatic database backups
 const backupTable = db.prepare(`
@@ -298,5 +229,175 @@ try {
     throw e;
   }
 }
+
+// Migration history table for tracking schema changes
+const migrationTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS migrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version TEXT NOT NULL UNIQUE,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'applied' CHECK(status IN ('pending', 'applied', 'failed', 'rolled_back')),
+    description TEXT
+  );
+`);
+
+migrationTable.run();
+
+// Create default migration record if none exists
+const migrationExists = db.prepare('SELECT id FROM migrations WHERE version = "1.0.0"').get();
+if (!migrationExists) {
+  db.prepare(`
+    INSERT INTO migrations (version, status, description)
+    VALUES ('1.0.0', 'applied', 'Initial schema with tasks, lists, subtasks, labels, reminders, attachments, time_entries')
+  `).run();
+}
+
+// Projects table for hierarchical organization
+const projectsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#3b82f6',
+    emoji TEXT NOT NULL DEFAULT '📁',
+    description TEXT,
+    parent_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES projects(id) ON DELETE SET NULL
+  );
+`);
+
+projectsTable.run();
+
+// Create task_projects table for many-to-many relationship
+const taskProjectsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS task_projects (
+    task_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (task_id, project_id),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
+`);
+
+taskProjectsTable.run();
+
+// Enhanced recurring_schedules table with complex patterns
+const recurringSchedulesTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS recurring_schedules (
+    task_id INTEGER NOT NULL PRIMARY KEY,
+    pattern TEXT NOT NULL CHECK(pattern IN ('daily', 'weekly', 'weekly_complex', 'monthly', 'monthly_custom')),
+    interval INTEGER NOT NULL DEFAULT 1,
+    interval_unit TEXT NOT NULL DEFAULT 'day',
+    weekdays TEXT, -- JSON array of weekday numbers for weekly patterns (0-6)
+    month_day INTEGER, -- Day of month for monthly patterns (1-31)
+    week_of_month INTEGER, -- Week of month (1-5) for complex monthly
+    weekday_of_month INTEGER, -- Weekday (0-6) for complex monthly
+    start_date DATE,
+    end_date DATE,
+    exclude_dates TEXT, -- JSON array of excluded dates (ISO date strings)
+    next_run DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  );
+`);
+
+recurringSchedulesTable.run();
+
+// Time tracking rules table for duration constraints
+const timeTrackingRulesTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS time_tracking_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL UNIQUE,
+    min_duration_minutes INTEGER DEFAULT 1,
+    max_duration_minutes INTEGER DEFAULT 480,
+    require_description INTEGER DEFAULT 0,
+    allowed_days TEXT, -- JSON array of allowed weekday numbers (0-6)
+    allowed_hours_start TEXT, -- HH:MM format
+    allowed_hours_end TEXT, -- HH:MM format
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  );
+`);
+
+timeTrackingRulesTable.run();
+
+// Integrations table for third-party API connections
+const integrationsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS integrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK(type IN ('calendar', 'webhook', 'api', 'oauth')),
+    api_key TEXT,
+    webhook_url TEXT,
+    config TEXT, -- JSON configuration
+    enabled INTEGER DEFAULT 1,
+    last_sync DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+integrationsTable.run();
+
+// Audit logs table for tracking all data changes
+const auditLogsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT DEFAULT 'default',
+    action TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    record_id INTEGER,
+    old_values TEXT, -- JSON of old values
+    new_values TEXT, -- JSON of new values
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+auditLogsTable.run();
+
+// Create indexes for new tables
+const createNewIndexes = () => {
+  // Projects indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_projects_parent_id ON projects(parent_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name)').run();
+
+  // Task projects indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_task_id ON task_projects(task_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_task_projects_project_id ON task_projects(project_id)').run();
+
+  // Recurring schedules indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_next_run ON recurring_schedules(next_run)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_recurring_schedules_pattern ON recurring_schedules(pattern)').run();
+
+  // Time tracking rules indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_tracking_rules_task_id ON time_tracking_rules(task_id)').run();
+
+  // Integrations indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_integrations_type ON integrations(type)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_integrations_enabled ON integrations(enabled)').run();
+
+  // Audit logs indexes
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_logs_table_name ON audit_logs(table_name)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_logs_record_id ON audit_logs(record_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)').run();
+
+  // Composite indexes for common query patterns
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_list_completed_date ON tasks(list_id, is_completed, date)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_priority_date ON tasks(priority, date)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_tasks_deadline_completed ON tasks(deadline, is_completed)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_subtasks_task_completed ON subtasks(task_id, is_completed)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_started ON time_entries(task_id, started_at)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time_sent ON reminders(time, is_sent)').run();
+};
+
+createNewIndexes();
 
 export default db;
