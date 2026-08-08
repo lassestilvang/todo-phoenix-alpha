@@ -7,7 +7,7 @@ import { useAgentOS } from '@/lib/agent-os';
 import { usePriorityAgent } from '@/lib/priority-agent';
 import { useEnvironmentAgent } from '@/lib/environment-agent';
 import { useBackchannelAgent } from '@/lib/backchannel-agent';
-import { useConflictArbiter } from '@/lib/conflict-arbiter';
+import { getConflictArbiter } from '@/lib/conflict-arbiter';
 import { usePatternMiningService } from '@/lib/pattern-miner';
 import { Task } from '@/types/task';
 import { v4 as uuidv4 } from 'uuid';
@@ -48,7 +48,7 @@ export class TaskScheduler {
     timezoneOffset: 0, // Adjust for local timezone if needed
   };
 
-  private conflictArbiter = useConflictArbiter();
+  private conflictArbiter = getConflictArbiter();
   private patternMiningService = usePatternMiningService();
 
   /**
