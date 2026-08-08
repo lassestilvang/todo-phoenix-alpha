@@ -11,9 +11,8 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { useAgentOS } from '@/lib/agent-os';
-import { useConflictArbiter } from '@/lib/conflict-arbiter';
+import { getConflictArbiter, ConflictArbiterImpl } from '@/lib/conflict-arbiter';
 import { useEnvironmentAgent } from '@/lib/environment-agent';
-import { useBackchannelAgent } from '@/lib/backchannel-agent';
 import { metricsCollector } from '@/lib/metrics';
 import { getScheduler } from '@/lib/scheduler';
 
@@ -36,12 +35,12 @@ beforeAll(() => {
 
 describe('Task Scheduling Integration', () => {
   let agentOS: ReturnType<typeof useAgentOS.getState>;
-  let conflictArbiter: ReturnType<typeof useConflictArbiter>;
+  let conflictArbiter: ConflictArbiterImpl;
   let scheduler: any;
 
   beforeAll(() => {
     agentOS = useAgentOS.getState();
-    conflictArbiter = useConflictArbiter();
+    conflictArbiter = getConflictArbiter();
     scheduler = getScheduler();
   });
 
@@ -87,15 +86,17 @@ describe('Task Scheduling Integration', () => {
     expect(assignment.assignedAgentId).toBe(agentId);
 
     // Verify agent state
-    const agent = agentOS.getAgent(agentId);
-    expect(agent?.currentTaskId).toBe(task.id);
+    const agentContext = agentOS.getContext(agentId);
+    expect(agentContext?.currentTaskId).toBe(task.id);
 
     // Complete task
-    agentOS.completeTask(task.id, agentId, true);
+    agentOS.completeTask(task.id, agentId);
+    metricsCollector.finishTask(task.id, agentId, true);
 
     // Verify task is no longer assigned
-    const completedAgent = agentOS.getAgent(agentId);
-    expect(completedAgent?.currentTaskId).toBeUndefined();
+    const completedAgentContext = agentOS.getContext(agentId);
+    // After completion, currentTaskId should be cleared
+    expect(completedAgentContext?.currentTaskId).toBe(undefined);
 
     // Verify metrics recorded
     const taskMetrics = metricsCollector.getTaskMetrics(agentId);
@@ -203,8 +204,8 @@ describe('Task Scheduling Integration', () => {
     const scheduledId = scheduler.scheduleTask(recurringTask);
     expect(scheduledId).toBe(recurringTask.id);
 
-    // Wait for at least one execution cycle
-    await new Promise(resolve => setTimeout(resolve, 15000));
+    // Wait for at least one execution cycle (using shorter timeout for tests)
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Verify task was scheduled
     const scheduledTasks = scheduler.getScheduledTasks();
