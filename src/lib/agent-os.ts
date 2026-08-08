@@ -15,6 +15,7 @@ import { createAgentDiscoveryCommand, AgentDiscoveryCommand } from './agent-prot
 import { createWorkRequest, AgentWorkRequest } from './agent-protocols';
 import { createStatusBroadcast, AgentStatusBroadcast } from './agent-protocols';
 import { createCapabilityDelegation, DistrictsCapabilityDelegates } from './agent-protocols';
+import { useEnvironmentAgent } from './environment-agent';
 
 // Type definitions for the AgentOS ecosystem
 export interface AgentCapabilityProfile {
@@ -73,6 +74,12 @@ export type AgentOSState = {
   coordination_config: AgentCoordinationConfig;
   global_queue: AgentTaskQueue;
   phase_registry: Map<string, { phase: string; agents: Set<string>; priority: number }>;
+  agent_contexts: Map<string, {
+    currentPhase: string;
+    focusLevel: number;
+    energyLevel: number;
+    availableSince: number;
+  }>;
 };
 
 export type AgentTask = {
@@ -217,25 +224,73 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
   },
 
   phase_registry: new Map(),
+  agent_contexts: new Map(),
 
   // Register a new agent
   registerAgent: (agentProfile: AgentCapabilityProfile) => {
-    const agents = new Map(get().agents);
-    const workloads = new Map(get().workloads);
+    set(state => {
+      const newAgents = new Map(state.agents);
+      const newWorkloads = new Map(state.workloads);
+      const newContexts = new Map(state.agent_contexts);
+      const newActiveLocks = new Map(state.active_locks);
+      const newPhaseRegistry = new Map(state.phase_registry);
 
-    agents.set(agentProfile.id, agentProfile);
-    workloads.set(agentProfile.id, {
-      active_tasks: 0,
-      completed_tasks: 0,
-      failed_tasks: 0,
-      avg_completion_time_ms: 0,
-      current_load_percentage: 0,
-      peak_load_percentage: 0,
-      task_spillage_rate: 0,
+      newAgents.set(agentProfile.id, agentProfile);
+      newWorkloads.set(agentProfile.id, {
+        active_tasks: 0,
+        completed_tasks: 0,
+        failed_tasks: 0,
+        avg_completion_time_ms: 0,
+        current_load_percentage: 0,
+        peak_load_percentage: 0,
+        task_spillage_rate: 0,
+      });
+      newContexts.set(agentProfile.id, {
+        currentPhase: 'idle',
+        focusLevel: 100,
+        energyLevel: 100,
+        availableSince: Date.now(),
+      });
+
+      return {
+        ...state,
+        agents: newAgents,
+        workloads: newWorkloads,
+        agent_contexts: newContexts,
+        active_locks: newActiveLocks,
+        phase_registry: newPhaseRegistry
+      };
     });
-
-    set({ agents, workloads });
     return agentProfile.id;
+  },
+
+  // Get agent context
+  getContext: (agentId: string) => {
+    const state = get();
+    return state.agent_contexts.get(agentId);
+  },
+
+  // Get agent details
+  getAgent: (agentId: string) => {
+    const state = get();
+    return state.agents.get(agentId);
+  },
+
+  // Update agent context
+  updateContext: (agentId: string, updates: Partial<{
+    currentPhase: string;
+    focusLevel: number;
+    energyLevel: number;
+    availableSince: number;
+  }>) => {
+    set(state => {
+      const agent_contexts = new Map(state.agent_contexts);
+      const existing = agent_contexts.get(agentId);
+      if (!existing) return state;
+
+      agent_contexts.set(agentId, { ...existing, ...updates });
+      return { agent_contexts };
+    });
   },
 
   // Update agent heartbeat and availability
@@ -273,17 +328,15 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
     // Check if task already has a lock
     if (active_locks.has(taskId)) {
       const existingLock = active_locks.get(taskId)!;
-      // Check if existing lock is expired
-      if (Date.now() < existingLock.expiresAt) {
-        // Lock is still held, cannot acquire
+      // Check if existing lock is expired OR if it's held by the same agent (reentrant)
+      if (Date.now() < existingLock.expiresAt && existingLock.agentId !== agentId) {
+        // Lock is still held by another agent, cannot acquire
         return false;
-      } else {
-        // Lock expired, remove it
-        active_locks.delete(taskId);
       }
+      // If expired or held by same agent, we can proceed (will overwrite or renew)
     }
 
-    // Acquire new lock
+    // Acquire/renew lock
     const expiresAt = Date.now() + lockTimeout;
     const newLock = {
       agentId,
@@ -380,8 +433,8 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
     }
 
     // Get current environment context
-    const env = useEnvironmentAgent();
-    const currentContext = env.getCurrentContext();
+    const { getCurrentContext } = useEnvironmentAgent.getState();
+    const currentContext = getCurrentContext();
     const context = currentContext.context;
 
     // Check if task requires specific context
@@ -411,18 +464,31 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
     const lockAcquired = get().acquireLock(task.id, agentId);
     if (!lockAcquired) return { success: false };
 
-    // Update agent state
+    // Update agent state (including the agent context for currentTaskId)
     set(state => {
-      const agents = new Map(state.agents);
-      const workloads = new Map(state.workloads);
+      const newAgents = new Map(state.agents);
+      const newWorkloads = new Map(state.workloads);
+      const newContexts = new Map(state.agent_contexts);
 
-      agents.get(agentId)!.currentTaskId = task.id;
-      agents.get(agentId)!.currentPhase = 'in_progress';
-      agents.get(agentId)!.focusLevel = 100;
-      agents.get(agentId)!.energyLevel = Math.max(0, agents.get(agentId)!.energyLevel - 10);
-      workloads.get(agentId)!.active_tasks = (workloads.get(agentId)!.active_tasks || 0) + 1;
+      // Get the agent profile for energy level
+      const agentProfile = newAgents.get(agentId)!;
 
-      return { agents, workloads };
+      // Update agent context (not the agent profile itself)
+      const updatedContext = newContexts.get(agentId)!;
+      updatedContext.currentTaskId = task.id;
+      updatedContext.currentPhase = 'in_progress';
+      updatedContext.focusLevel = 100;
+      updatedContext.energyLevel = Math.max(0, agentProfile.energyLevel - 10);
+
+      const updatedWorkload = newWorkloads.get(agentId)!;
+      updatedWorkload.active_tasks = (updatedWorkload.active_tasks || 0) + 1;
+
+      return {
+        ...state,
+        agents: newAgents,
+        workloads: newWorkloads,
+        agent_contexts: newContexts
+      };
     });
 
     return { success: true, assignedAgentId: agentId };
@@ -441,10 +507,11 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
     // Mark task as completed in queue
     get().global_queue.markCompleted(taskId, agentId);
 
-    // Update agent state
+        // Update agent state (including the agent context for currentTaskId)
     set(state => {
       const agents = new Map(state.agents);
       const workloads = new Map(state.workloads);
+      const agent_contexts = new Map(state.agent_contexts);
 
       const agent = agents.get(agentId);
       if (agent) {
@@ -453,9 +520,19 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
         agent.focusLevel = 100;
         agent.energyLevel = Math.min(100, agent.energyLevel + 20);
       }
+
+      // Update agent context to remove currentTaskId
+      const context = agent_contexts.get(agentId);
+      if (context) {
+        context.currentTaskId = undefined;
+        context.currentPhase = 'idle';
+        context.focusLevel = 100;
+        context.energyLevel = Math.min(100, context.energyLevel + 20);
+      }
+
       workloads.get(agentId)!.active_tasks = Math.max(0, (workloads.get(agentId)!.active_tasks || 0) - 1);
 
-      return { agents, workloads };
+      return { agents, workloads, agent_contexts };
     });
   },
 
