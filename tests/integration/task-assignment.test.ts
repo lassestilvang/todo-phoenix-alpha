@@ -1,4 +1,3 @@
-"use client";
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAgentOS } from '@/lib/agent-os';
 import { usePriorityAgent } from '@/lib/priority-agent';
@@ -28,9 +27,9 @@ function createMockTask(priority: number = 5) {
     priority,
     dependencies: [],
     created_by: MOCK_AGENT_ID,
-    status: 'pending' as const,
+    status: 'pending',
     created_at: Date.now(),
-    deadline: new Date(Date.now() + 3600000), // 1 hour from now
+    deadline: new Date(Date.now() + 3600000),
   };
 }
 
@@ -47,7 +46,9 @@ describe('Task Assignment Integration Flow', () => {
     const agentRegistry = useAgentRegistry.getState();
     const agentId = agentRegistry.registerAgent({
       name: 'Mock Test Agent',
+      version: '1.0.0',
       capabilities: mockAgentCapabilities(),
+      specializations: ['analysis'],
       workField: 'analysis',
     });
 
@@ -101,13 +102,12 @@ describe('Task Assignment Integration Flow', () => {
     expect(assignmentResult.assignedAgentId).toBe(MOCK_AGENT_ID);
 
     // Verify task status in agent OS
-    const agentOS = useAgentOS.getState();
     const agent = agentOS.getAgent(MOCK_AGENT_ID);
     expect(agent).toBeDefined();
     expect(agent?.currentTaskId).toBe(createdTask.id);
 
     // Simulate task completion
-    const completionResult = await completeTask(createdTask.id, MOCK_AGENT_ID, true);
+    const completionResult = await completeTask(createdTask.id, MOCK_AGENT_ID);
     expect(completionResult.success).toBe(true);
 
     // Verify task status in backend
@@ -185,7 +185,6 @@ describe('Task Assignment Integration Flow', () => {
       deadline: mediumPriorityTask.deadline,
       dependencies: mediumPriorityTask.dependencies,
       context_type: 'work',
-      user_focus_areas: ['analysis'],
       user_energy_level: 80,
     });
 
@@ -195,7 +194,6 @@ describe('Task Assignment Integration Flow', () => {
       deadline: lowPriorityTask.deadline,
       dependencies: lowPriorityTask.dependencies,
       context_type: 'work',
-      user_focus_areas: ['analysis'],
       user_energy_level: 80,
     });
 
@@ -223,7 +221,7 @@ describe('Task Assignment Integration Flow', () => {
     expect(agent?.currentTaskId).toBeDefined();
 
     // Simulate completion and check task ordering
-    await completeTask(createdTasks[0].id, MOCK_AGENT_ID, true);
+    await completeTask(createdTasks[0].id, MOCK_AGENT_ID);
 
     // After completion, the next priority task should be auto-assigned
     // (This tests the queuing mechanism in agent OS)
