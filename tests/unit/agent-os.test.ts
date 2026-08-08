@@ -36,9 +36,11 @@ describe('AgentOS', () => {
 
     const agentId = agentOS.registerAgent(profile);
     expect(agentId).toBe('test-agent-1');
-    expect(agentOS.agents.has(agentId)).toBe(true);
-    expect(agentOS.agents.get(agentId)?.name).toBe('Test Agent');
-    expect(agentOS.workloads.has(agentId)).toBe(true);
+    // Get fresh state after mutation
+    const updatedState = useAgentOS.getState();
+    expect(updatedState.agents.has(agentId)).toBe(true);
+    expect(updatedState.agents.get(agentId)?.name).toBe('Test Agent');
+    expect(updatedState.workloads.has(agentId)).toBe(true);
   });
 
   it('should update agent heartbeat and availability', () => {
@@ -63,20 +65,21 @@ describe('AgentOS', () => {
     };
 
     const agentId = agentOS.registerAgent(profile);
-    const initialContext = agentOS.getContext(agentId);
+    const updatedState = useAgentOS.getState();
+    const initialContext = updatedState.getContext(agentId);
     expect(initialContext).toBeDefined();
     expect(initialContext?.focusLevel).toBe(100);
     expect(initialContext?.energyLevel).toBe(100);
 
     // Update context to simulate work
-    agentOS.updateContext(agentId, {
+    updatedState.updateContext(agentId, {
       currentPhase: 'deep_work',
       focusLevel: 30,
       energyLevel: 40,
       availableSince: Date.now() - 300000, // 5 minutes ago
     });
 
-    const updatedContext = agentOS.getContext(agentId);
+    const updatedContext = useAgentOS.getState().getContext(agentId);
     expect(updatedContext?.currentPhase).toBe('deep_work');
     expect(updatedContext?.focusLevel).toBe(30);
     expect(updatedContext?.energyLevel).toBe(40);
@@ -107,20 +110,20 @@ describe('AgentOS', () => {
     const taskId = 'test-task-1';
 
     // Initially no lock
-    expect(agentOS.isLocked(taskId)).toBe(false);
+    expect(useAgentOS.getState().isLocked(taskId)).toBe(false);
 
     // Acquire lock
-    const lockAcquired = agentOS.acquireLock(taskId, agentId);
+    const lockAcquired = useAgentOS.getState().acquireLock(taskId, agentId);
     expect(lockAcquired).toBe(true);
-    expect(agentOS.isLocked(taskId)).toBe(true);
+    expect(useAgentOS.getState().isLocked(taskId)).toBe(true);
 
-    // Try to acquire lock again by same agent (should still work - reentrant?)
-    const lockAcquiredAgain = agentOS.acquireLock(taskId, agentId);
-    expect(lockAcquiredAgain).toBe(true); // Depending on implementation
+    // Try to acquire lock again by same agent (should still work - reentrant)
+    const lockAcquiredAgain = useAgentOS.getState().acquireLock(taskId, agentId);
+    expect(lockAcquiredAgain).toBe(true);
 
     // Release lock
-    agentOS.releaseLock(taskId);
-    expect(agentOS.isLocked(taskId)).toBe(false);
+    useAgentOS.getState().releaseLock(taskId);
+    expect(useAgentOS.getState().isLocked(taskId)).toBe(false);
 
     // Another agent should be able to acquire now
     const profile2: AgentCapabilityProfile = {
@@ -141,8 +144,8 @@ describe('AgentOS', () => {
       energy_level: 75,
       availability_score: 80,
     };
-    const agentId2 = agentOS.registerAgent(profile2);
-    const lockAcquiredByOther = agentOS.acquireLock(taskId, agentId2);
+    const agentId2 = useAgentOS.getState().registerAgent(profile2);
+    const lockAcquiredByOther = useAgentOS.getState().acquireLock(taskId, agentId2);
     expect(lockAcquiredByOther).toBe(true);
   });
 
@@ -184,17 +187,17 @@ describe('AgentOS', () => {
     };
 
     // Should be able to assign
-    const result = agentOS.assignTask(task, agentId);
+    const result = useAgentOS.getState().assignTask(task, agentId);
     expect(result.success).toBe(true);
     expect(result.assignedAgentId).toBe(agentId);
 
     // Check that agent state updated
-    const agentContext = agentOS.getContext(agentId);
+    const agentContext = useAgentOS.getState().getContext(agentId);
     expect(agentContext?.currentTaskId).toBe(task.id);
     expect(agentContext?.currentPhase).toBe('in_progress');
 
     // Check workload updated
-    const workload = agentOS.workloads.get(agentId);
+    const workload = useAgentOS.getState().workloads.get(agentId);
     expect(workload?.active_tasks).toBe(1);
 
     // Try to assign a task requiring capabilities the agent doesn't have
@@ -209,7 +212,7 @@ describe('AgentOS', () => {
       created_at: Date.now(),
     };
 
-    const result2 = agentOS.assignTask(task2, agentId);
+    const result2 = useAgentOS.getState().assignTask(task2, agentId);
     expect(result2.success).toBe(false); // Should fail due to missing capability
   });
 });
