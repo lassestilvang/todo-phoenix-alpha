@@ -230,6 +230,15 @@ try {
   }
 }
 
+// Performance-optimized indexes for time tracking queries
+const optimizeTimeTrackingIndexes = () => {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_date ON time_entries(task_id, started_at DESC)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_duration ON time_entries(task_id, duration_minutes)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_date_range ON time_entries(started_at, stopped_at)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_stopped ON time_entries(task_id, stopped_at DESC)').run();
+};
+optimizeTimeTrackingIndexes();
+
 // Migration history table for tracking schema changes
 const migrationTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS migrations (
