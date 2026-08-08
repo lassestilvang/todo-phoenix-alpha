@@ -11,6 +11,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { AgentCapabilityProfile } from './agent-os';
+import { EventEmitter } from 'events';
 
 export type ConflictType =
   | 'TASK_LOCK_CONTENTION'
@@ -90,6 +91,12 @@ class ConflictArbiterImpl {
     listeners: new EventEmitter(),
   };
 
+  constructor() {
+    // Initialize state
+    // Setup event listeners
+    this.setupEventListeners();
+  }
+
   /**
    * Start the conflict arbiter
    */
@@ -118,6 +125,19 @@ class ConflictArbiterImpl {
       this.state.detection_interval = undefined;
     }
     this.state.listeners.removeAllListeners();
+  }
+
+  /**
+   * Create a new conflict (alias for reportConflict)
+   */
+  async createConflict(conflict: Omit<ConflictEvent, 'id' | 'detected_at'>): Promise<string> {
+    // Normalize the type field to handle both uppercase and lowercase
+    const normalizedConflict = {
+      ...conflict,
+      type: conflict.type.toUpperCase() as ConflictType,
+      participants: [...conflict.participants], // Ensure fresh array
+    };
+    return Promise.resolve(this.reportConflict(normalizedConflict));
   }
 
   /**
@@ -466,6 +486,17 @@ export function createConflictArbiter(): ConflictArbiterImpl {
 }
 
 export { ConflictArbiterImpl };
+
+// Alias for backward compatibility
+export const ConflictArbiter = ConflictArbiterImpl;
+
+// Add createConflict as alias for reportConflict
+declare module './conflict-arbiter' {
+  interface ConflictArbiterImpl {
+    createConflict: (conflict: Omit<ConflictEvent, 'id' | 'detected_at'>) => string;
+  }
+}
+
 export type {
   ConflictEvent,
   ConflictType,
