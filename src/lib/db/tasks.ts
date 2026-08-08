@@ -172,89 +172,12 @@ export const taskOperations = {
       }
     }
 
-    // Create reminders if provided
-    if (data.reminder_minutes !== undefined || data.reminder_time !== undefined) {
-      let reminderTime: Date;
-
-      if (data.reminder_time !== undefined) {
-        // Parse reminder_time string like "HH:mm" and combine with task date
-        const [hours, minutes] = data.reminder_time.split(':').map(Number);
-        const baseDate = data.date ? new Date(data.date) : new Date();
-        reminderTime = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, minutes);
-
-        // If the time has already passed today, schedule for tomorrow
-        if (reminderTime <= new Date()) {
-          reminderTime.setDate(reminderTime.getDate() + 1);
-        }
-      } else if (data.reminder_minutes !== undefined && data.date !== undefined) {
-        // Calculate reminder time based on minutes before task date/time
-        const taskDate = data.date ? new Date(data.date) : new Date();
-        if (data.deadline) {
-          // If there's a deadline, use that for reminder calculation
-          reminderTime = new Date(taskDate.getTime() - (data.reminder_minutes * 60000));
-        } else {
-          // Otherwise use the date (assuming 9am if no time specified)
-          reminderTime = new Date(taskDate.getTime() - (data.reminder_minutes * 60000));
-          // Set to 9am if no time was specified in the date
-          if (reminderTime.getHours() === 0 && reminderTime.getMinutes() === 0) {
-            reminderTime.setHours(9, 0, 0);
-          }
-        }
-      } else {
-        // Default: remind at task time
-        reminderTime = data.date ? new Date(data.date) : new Date();
-      }
-
-      // Create the reminder
-      reminderOperations.create(taskId, reminderTime);
-    }
-
     return taskOperations.getById(taskId)!;
   },
 
   update: (id: number, updates: Partial<TaskFormData>): Task => {
     const currentTask = taskOperations.getById(id);
     if (!currentTask) throw new Error('Task not found');
-
-    // Log changes
-    const changesToLog: { field: string; oldValue: string | number | boolean | null; newValue: string | number | boolean | null }[] = [];
-
-    if (updates.name !== undefined && updates.name !== currentTask.name) {
-      changesToLog.push({ field: 'name', oldValue: currentTask.name, newValue: updates.name });
-    }
-    if (updates.description !== undefined && updates.description !== currentTask.description) {
-      changesToLog.push({ field: 'description', oldValue: currentTask.description, newValue: updates.description });
-    }
-    if (updates.date !== undefined) {
-      const newDate = updates.date ? updates.date.toISOString().split('T')[0] : null;
-      if (newDate !== currentTask.date) {
-        changesToLog.push({ field: 'date', oldValue: currentTask.date, newValue: newDate });
-      }
-    }
-    if (updates.deadline !== undefined) {
-      const newDeadline = updates.deadline ? updates.deadline.toISOString() : null;
-      if (newDeadline !== currentTask.deadline) {
-        changesToLog.push({ field: 'deadline', oldValue: currentTask.deadline, newValue: newDeadline });
-      }
-    }
-    if (updates.estimate_minutes !== undefined && updates.estimate_minutes !== currentTask.estimate_minutes) {
-      changesToLog.push({ field: 'estimate_minutes', oldValue: currentTask.estimate_minutes, newValue: updates.estimate_minutes });
-    }
-    if (updates.priority !== undefined && updates.priority !== currentTask.priority) {
-      changesToLog.push({ field: 'priority', oldValue: currentTask.priority, newValue: updates.priority });
-    }
-    if (updates.is_recurring !== undefined && updates.is_recurring !== (currentTask.is_recurring === 1)) {
-      changesToLog.push({ field: 'is_recurring', oldValue: currentTask.is_recurring, newValue: updates.is_recurring });
-    }
-    if (updates.recurring_pattern !== undefined && updates.recurring_pattern !== currentTask.recurring_pattern) {
-      changesToLog.push({ field: 'recurring_pattern', oldValue: currentTask.recurring_pattern, newValue: updates.recurring_pattern });
-    }
-    if (updates.recurring_custom_value !== undefined && updates.recurring_custom_value !== currentTask.recurring_custom_value) {
-      changesToLog.push({ field: 'recurring_custom_value', oldValue: currentTask.recurring_custom_value, newValue: updates.recurring_custom_value });
-    }
-    if (updates.list_id !== undefined && updates.list_id !== currentTask.list_id) {
-      changesToLog.push({ field: 'list_id', oldValue: currentTask.list_id, newValue: updates.list_id });
-    }
 
     // Update the task
     const updateFields: string[] = [];
@@ -307,28 +230,6 @@ export const taskOperations = {
       db.prepare(`UPDATE tasks SET ${updateFields.join(', ')} WHERE id = ?`).run(...updateValues);
     }
 
-    // Log changes to database
-    if (changesToLog.length > 0) {
-      const insertChange = db.prepare(`
-        INSERT INTO task_changes (task_id, field_name, old_value, new_value)
-        VALUES (?, ?, ?, ?)
-      `);
-      for (const change of changesToLog) {
-        insertChange.run(id, change.field, String(change.oldValue), String(change.newValue));
-      }
-    }
-
-    // Update labels if provided
-    if (updates.label_ids !== undefined) {
-      db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(id);
-      if (updates.label_ids.length > 0) {
-        const insertLabel = db.prepare('INSERT INTO task_labels (task_id, label_id) VALUES (?, ?)');
-        for (const labelId of updates.label_ids) {
-          insertLabel.run(id, labelId);
-        }
-      }
-    }
-
     return taskOperations.getById(id)!;
   },
 
@@ -343,12 +244,6 @@ export const taskOperations = {
       SET is_completed = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(newCompleted, id);
-
-    // Log the change
-    db.prepare(`
-      INSERT INTO task_changes (task_id, field_name, old_value, new_value)
-      VALUES (?, ?, ?, ?)
-    `).run(id, 'is_completed', String(task.is_completed), String(newCompleted));
 
     return taskOperations.getById(id)!;
   },
