@@ -1,47 +1,99 @@
 import db from './schema';
-import { Reminder } from '../types';
+import { Task } from '@/lib/types';
+
+export interface Reminder {
+  id: number;
+  task_id: number;
+  time: string;
+  is_sent: boolean;
+  sent_at?: string;
+  task?: Task;
+}
 
 export const reminderOperations = {
-  getAll: (taskId: number): Reminder[] => {
-    return db.prepare('SELECT * FROM reminders WHERE task_id = ? ORDER BY time ASC').all(taskId) as Reminder[];
+  getAll: (): Reminder[] => {
+    return db.prepare('SELECT * FROM reminders').all() as Reminder[];
   },
 
-  getById: (id: number): Reminder | undefined => {
-    return db.prepare('SELECT * FROM reminders WHERE id = ?').get(id) as Reminder | undefined;
+  getById: (id: number): Reminder | null => {
+    return db.prepare('SELECT * FROM reminders WHERE id = ?').get(id) as Reminder | null;
   },
 
-  create: (taskId: number, time: Date): Reminder => {
-    const result = db.prepare(`
-      INSERT INTO reminders (task_id, time)
-      VALUES (?, ?)
-    `).run(taskId, time.toISOString());
-    
-    return reminderOperations.getById(result.lastInsertRowid as number)!;
+  getByTaskId: (taskId: number): Reminder[] => {
+    return db.prepare('SELECT * FROM reminders WHERE task_id = ?').all(taskId) as Reminder[];
+  },
+
+  getUpcoming: (fromTime: string): Reminder[] => {
+    return db.prepare(
+      'SELECT * FROM reminders WHERE time >= ? AND is_sent = 0 ORDER BY time ASC'
+    ).all(fromTime) as Reminder[];
+  },
+
+  getPending: (): Reminder[] => {
+    return db.prepare(
+      'SELECT * FROM reminders WHERE is_sent = 0 ORDER BY time ASC'
+    ).all() as Reminder[];
+  },
+
+  create: (taskId: number, time: string): Reminder => {
+    const result = db.prepare(
+      'INSERT INTO reminders (task_id, time) VALUES (?, ?)'
+    ).run(taskId, time);
+
+    return this.getById(result.lastInsertRowid as number)!;
+  },
+
+  update: (id: number, updates: Partial<Reminder>): Reminder => {
+    const updatesArray: string[] = [];
+    const values: (string | number | boolean)[] = [];
+
+    if (updates.time !== undefined) {
+      updatesArray.push('time = ?');
+      values.push(updates.time);
+    }
+
+    if (updates.is_sent !== undefined) {
+      updatesArray.push('is_sent = ?');
+      values.push(updates.is_sent ? 1 : 0);
+      if (updates.is_sent && !updates.sent_at) {
+        updatesArray.push('sent_at = CURRENT_TIMESTAMP');
+      }
+    }
+
+    if (updatesArray.length === 0) {
+      throw new Error('No updates provided');
+    }
+
+    db.prepare(`UPDATE reminders SET ${updatesArray.join(', ')} WHERE id = ?`).run(...values, id);
+
+    return this.getById(id)!;
   },
 
   markAsSent: (id: number): Reminder => {
-    db.prepare(`
-      UPDATE reminders 
-      SET is_sent = 1, sent_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(id);
-    
-    return reminderOperations.getById(id)!;
+    return this.update(id, { is_sent: true, sent_at: new Date().toISOString() });
   },
 
   delete: (id: number): void => {
     db.prepare('DELETE FROM reminders WHERE id = ?').run(id);
   },
 
-  deleteAllForTask: (taskId: number): void => {
+  deleteByTaskId: (taskId: number): void => {
     db.prepare('DELETE FROM reminders WHERE task_id = ?').run(taskId);
   },
 
-  getPendingReminders: (currentTime: Date): Reminder[] => {
-    return db.prepare(`
-      SELECT * FROM reminders 
-      WHERE time <= ? AND is_sent = 0
-      ORDER BY time ASC
-    `).all(currentTime.toISOString()) as Reminder[];
+  // New: Get reminders for today
+  getToday: (): Reminder[] => {
+    const today = new Date().toISOString().split('T')[0];
+    return db.prepare(
+      'SELECT * FROM reminders WHERE date(time, "start of day") = date(?) AND is_sent = 0 ORDER BY time ASC'
+    ).all(today) as Reminder[];
+  },
+
+  // New: Get overdue reminders (past due time)
+  getOverdue: (): Reminder[] => {
+    const now = new Date().toISOString();
+    return db.prepare(
+      'SELECT * FROM reminders WHERE time < ? AND is_sent = 0 ORDER BY time ASC'
+    ).all(now) as Reminder[];
   }
 };
