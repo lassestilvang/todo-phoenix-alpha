@@ -393,37 +393,6 @@ export async function getTaskSuggestions(taskId: number): Promise<{
   const task = taskOperations.getByIdWithDetails(taskId)
   if (!task) throw new Error('Task not found');
 
-  const suggestions = {
-    priority: task.priority,
-    estimatedMinutes: task.estimate_minutes,
-    relatedTasks: [] as number[],
-  };
-
-  if ((task as any).labels && (task as any).labels.length > 0) {
-    const allTasks = taskOperations.getAll();
-    for (const label of (task as any).labels) {
-      const related = allTasks.filter(t =>
-        t.id !== task.id &&
-        (t as any).labels &&
-        (t as any).labels.some((l: any) => l.id === label.id)
-      );
-      suggestions.relatedTasks.push(...related.map(t => t.id));
-    }
-    suggestions.relatedTasks = [...new Set(suggestions.relatedTasks)];
-  }
-
-  if (task.deadline) {
-    const deadline = new Date(task.deadline);
-    const now = new Date();
-    const diffDays = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-
-    if (diffDays <= 1 && suggestions.priority !== 'high') {
-      suggestions.priority = 'high';
-    } else if (diffDays <= 7 && suggestions.priority === 'none') {
-      suggestions.priority = 'medium';
-    }
-  }
-
   // NEW: Enhance suggestions with AI-powered insights
   try {
     const aiResponse = await generateTaskSuggestions({
@@ -432,25 +401,27 @@ export async function getTaskSuggestions(taskId: number): Promise<{
       date: task.deadline
     });
 
-    if (aiResponse.priority !== 'none') {
-      suggestions.priority = aiResponse.priority;
-    }
-
-    if (aiResponse.suggestedTimeEstimate > 0) {
-      suggestions.estimatedMinutes = aiResponse.suggestedTimeEstimate;
-    }
-
-    // Only add related tasks if we have AI suggestions
-    if (aiResponse.relatedTasks.length > 0) {
-      suggestions.relatedTasks = aiResponse.relatedTasks;
-    }
+    // Return the full AI response with task-specific overrides
+    return {
+      priority: aiResponse.priority !== 'none' ? aiResponse.priority : task.priority,
+      suggestedTimeEstimate: aiResponse.suggestedTimeEstimate > 0 ? aiResponse.suggestedTimeEstimate : (task.estimate_minutes || 30),
+      suggestedDate: task.deadline || null,
+      relatedTasks: aiResponse.relatedTasks.length > 0 ? aiResponse.relatedTasks : [],
+      confidence: aiResponse.confidence,
+      predictiveSchedule: aiResponse.predictiveSchedule
+    };
   } catch (error) {
-    console.error('Error enhancing suggestions with AI:', error);
-    // Continue with basic suggestions if AI fails
+    console.error('Error generating suggestions with AI:', error);
+    // Fallback to basic suggestions if AI fails
+    return {
+      priority: task.priority || 'medium',
+      suggestedTimeEstimate: task.estimate_minutes || 30,
+      suggestedDate: task.deadline || null,
+      relatedTasks: [],
+      confidence: 30,
+      predictiveSchedule: undefined
+    };
   }
-
-  revalidatePath("/")
-  return suggestions;
 }
 
 // NEW: Handle file attachments
