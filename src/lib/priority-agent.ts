@@ -77,18 +77,18 @@ const defaultConfig: PriorityAgentConfig = {
     not_urgent_important: 60,
     urgent_not_important: 40,
     not_urgent_not_important: 20,
-  };
+  },
   deadline_decay_thresholds: {
     under_1h: 100,
     under_24h: 80,
     under_1w: 60,
     over_1w: 40,
-  };
+  },
   energy_allocation: {
     high_energy_tasks: 100,
     medium_energy_tasks: 80,
     low_energy_tasks: 50,
-  };
+  }
 };
 
 // Priority Agent Store
@@ -97,13 +97,13 @@ export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
   config: defaultConfig,
   last_user_focus_change: Date.now(),
   learning_patterns: new Map(),
-    energy_patterns: new Map(),
+  energy_patterns: new Map(),
   is_running: true,
   is_learning: true,
 
   // Update or create a priority score for a task
   updateScore: (taskContext: TaskContext, userFocusState?: string) => {
-    const scores = new Map(get().scores);
+    const scoresMap = new Map(get().scores);
     const userFocus = userFocusState || get().last_user_focus_change;
 
     // Calculate component scores
@@ -146,16 +146,16 @@ export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
         user_focus: Math.round(userFocusScore),
       },
       decay_factor: decayFactor,
-      last_updated: Date.now(),
-    };
+      last_updated: Date.now()
+    }
 
-    scores.set(taskContext.taskId, priorityScore);
+    scoresMap.set(taskContext.taskId, priorityScore);
 
     // Record learning patterns
     updateLearningPattern(taskContext, overallScore);
     updateEnergyPattern(taskContext, energyScore);
 
-    set({ scores });
+    set({ scores: scoresMap });
     return priorityScore;
   },
 
@@ -322,12 +322,15 @@ function getTask(taskId: string): TaskContext | null {
   return null;
 }
 
-// Auto-start learning if enabled
-if (get().is_learning) {
-  // Start continuous learning interval
-  setInterval(() => {
-    if (get().is_learning) {
-      // Continuous learning logic here
-    }
-  }, 60000); // Every minute
+// Auto-start learning if enabled - moved to a function
+// call startAutoLearning() from the application to enable
+export function startAutoLearning() {
+  if (usePriorityAgent.getState().is_learning) {
+    // Start continuous learning interval
+    setInterval(() => {
+      if (usePriorityAgent.getState().is_learning) {
+        // Continuous learning logic here
+      }
+    }, 60000); // Every minute
+  }
 }
