@@ -44,6 +44,25 @@ vi.mock('@/lib/ai/enhancement', () => ({
   generateInsights: vi.fn(),
 }))
 
+// Mock the database operations
+vi.mock('@/lib/db', () => ({
+  taskOperations: {
+    getById: vi.fn(),
+    getAll: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    search: vi.fn(),
+    getByIdWithDetails: vi.fn(),
+  },
+  listOperations: {},
+  labelOperations: {},
+  subtaskOperations: {},
+  timeEntryOperations: {},
+  reminderOperations: {},
+  attachmentOperations: {},
+}))
+
 // Mock the database
 vi.mock('@/lib/db/schema', () => ({
   default: {
@@ -113,7 +132,9 @@ describe('Tasks Actions', () => {
 
   describe('AI & Dependency Integration', () => {
     describe('getTaskSuggestions', () => {
-      beforeEach(() => {
+      let dbModule
+
+      beforeEach(async () => {
         // Setup default mock
         vi.mocked(generateTaskSuggestions).mockResolvedValue({
           priority: 'medium',
@@ -122,9 +143,30 @@ describe('Tasks Actions', () => {
           relatedTasks: [],
           confidence: 30,
         })
+
+        // Mock taskOperations.getByIdWithDetails to return a task
+        dbModule = await import('@/lib/db')
+        dbModule.taskOperations.getByIdWithDetails.mockResolvedValue({
+          id: 1,
+          priority: 'medium',
+          estimate_minutes: 30,
+          deadline: null,
+          dependencies: '[]',
+          labels: [],
+        })
       })
 
       it('should return basic suggestions without AI', async () => {
+        // Mock taskOperations.getByIdWithDetails to return a task
+        dbModule.taskOperations.getByIdWithDetails.mockResolvedValue({
+          id: 1,
+          priority: 'medium',
+          estimate_minutes: 30,
+          deadline: null,
+          dependencies: '[]',
+          labels: [],
+        })
+
         const result = await getTaskSuggestions(1)
         expect(result.priority).toBe('medium')
         expect(result.suggestedTimeEstimate).toBe(30)
@@ -142,6 +184,16 @@ describe('Tasks Actions', () => {
             optimalStartTime: '09:00',
             confidence: 90,
           },
+        })
+
+        // Mock taskOperations.getByIdWithDetails to return a task
+        dbModule.taskOperations.getByIdWithDetails.mockResolvedValue({
+          id: 1,
+          priority: 'medium',
+          estimate_minutes: 30,
+          deadline: new Date('2026-08-18').toISOString(),
+          dependencies: '[]',
+          labels: [],
         })
 
         const result = await getTaskSuggestions(1)
@@ -162,6 +214,16 @@ describe('Tasks Actions', () => {
             optimalStartTime: '09:00',
             confidence: 80,
           },
+        })
+
+        // Mock taskOperations.getByIdWithDetails to return a task
+        dbModule.taskOperations.getByIdWithDetails.mockResolvedValue({
+          id: 1,
+          priority: 'medium',
+          estimate_minutes: 30,
+          deadline: new Date('2026-08-18').toISOString(),
+          dependencies: '[]',
+          labels: [],
         })
 
         const result = await getTaskSuggestions(1)
@@ -215,25 +277,20 @@ describe('Tasks Actions', () => {
       })
 
       it('should prevent circular dependency', async () => {
-        const mockTask1 = { id: 1, dependencies: JSON.stringify([2]) as const }
+        const mockTask1 = { id: 1, dependencies: '[]' as const }
         const mockTask2 = { id: 2, dependencies: JSON.stringify([1]) as const }
-        const mockGetTask1 = vi.fn().mockReturnValue(mockTask1)
-        const mockGetTask2 = vi.fn().mockReturnValue(mockTask2)
         const mockGetAll = vi.fn().mockReturnValue([mockTask1, mockTask2])
 
-        const taskOperations = {
-          getById: vi.fn().mockImplementation((id: number) => {
-            if (id === 1) return mockTask1
-            if (id === 2) return mockTask2
-            return undefined
-          }),
-          getAll: mockGetAll,
-        } as any
+        // Import db and mock its taskOperations
+        const db = await import('@/lib/db')
+        db.taskOperations.getById = vi.fn().mockImplementation((id: number) => {
+          if (id === 1) return mockTask1
+          if (id === 2) return mockTask2
+          return undefined
+        })
+        db.taskOperations.getAll = mockGetAll
 
-        const taskModule = await import('@/app/actions/tasks')
-        ;(taskModule as any).taskOperations = taskOperations
-
-        await expect(addTaskDependency(1, 2)).rejects.toThrow('circular dependency')
+        await expect(addTaskDependency(1, 2)).rejects.toThrow('Adding this dependency would create a circular dependency')
       })
     })
 
@@ -269,6 +326,17 @@ describe('Tasks Actions', () => {
             optimalStartTime: '09:00',
             confidence: 80,
           },
+        })
+
+        // Mock taskOperations.getByIdWithDetails to return a task
+        const dbMod = await import('@/lib/db')
+        dbMod.taskOperations.getByIdWithDetails.mockResolvedValue({
+          id: 1,
+          priority: 'medium',
+          estimate_minutes: 30,
+          deadline: new Date('2026-08-18T09:00:00.000Z').toISOString(),
+          dependencies: '[]',
+          labels: [],
         })
 
         const result = await getTaskSuggestions(1)
