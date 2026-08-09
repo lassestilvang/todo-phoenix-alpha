@@ -1,80 +1,74 @@
 {
-  "name": "Todo Phoenix Alpha",
-  "short_name": "TodoPhoenix",
-  "description": "A powerful task management application with AI enhancements",
+  "name": "Todo Phoenix - AI-Powered Task Management",
+  "short_name": "Todo Phoenix",
+  "description": "Intelligent task management with AI, voice input, and advanced scheduling",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
+  "theme_color": "#6366f1",
   "orientation": "portrait-primary",
-  "scope": "/",
   "icons": [
     {
-      "src": "/icons/icon-72x72.png",
+      "src": "/icons/icon-72.png",
       "sizes": "72x72",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
-      "src": "/icons/icon-96x96.png",
+      "src": "/icons/icon-96.png",
       "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-128x128.png",
+      "src": "/icons/icon-128.png",
       "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-144x144.png",
+      "src": "/icons/icon-144.png",
       "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-152x152.png",
+      "src": "/icons/icon-152.png",
       "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icons/icon-384x384.png",
+      "src": "/icons/icon-384.png",
       "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
-  "categories": ["productivity", "utilities"],
-  "shortcuts": [
+  "screenshots": [
     {
-      "name": "New Task",
-      "short_name": "New Task",
-      "description": "Create a new task",
-      "url": "/tasks/new",
-      "icons": [{ "src": "/icons/add-icon.png", "sizes": "192x192" }]
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
     },
     {
-      "name": "Today's Tasks",
-      "short_name": "Today",
-      "description": "View tasks for today",
-      "url": "/tasks?filter=today",
-      "icons": [{ "src": "/icons/today-icon.png", "sizes": "192x192" }]
+      "src": "/screenshots/mobile-task-view.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ],
-  "screenshots": [],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "prefer_related_applications": false
 }
