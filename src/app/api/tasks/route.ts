@@ -1,209 +1,162 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { Task, AssignmentStatus, TaskStatus } from '@/types/task';
+import { NextRequest, NextResponse } from 'next/server';
+import { getTasks, createTask, updateTask, deleteTask, toggleTaskComplete, searchTasks, getSubtasks, createSubtask, updateSubtask, toggleSubtaskComplete, deleteSubtask, getTimeEntries, startTimeEntry, stopTimeEntry, getActiveTimeEntry, getTotalTimeForTask, createTaskFromNLP, getTaskSuggestions, addAttachmentToTask, createReminder, createTaskFromVoice, exportDatabaseAsJson, createBackup, listBackups, addGoogleCalendarEvent, addSlackNotification, scheduleEmailReminder, getExternalIntegrations, deleteExternalIntegration, getTaskDependencies, addTaskDependency, removeTaskDependency, getDependentTasks, getDependencyChain, validateDependencies, getSmartTemplates, createTemplate } from '@/app/actions/tasks';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const listId = searchParams.get('listId');
+    const status = searchParams.get('status');
+    const includeCompleted = searchParams.get('includeCompleted') === 'true';
+    const query = searchParams.get('query');
 
-    if (userId) {
-      const tasks = await prisma.task.findMany({
-        where: { createdBy: userId },
-        include: {
-          agent: true,
-          parent: true,
-          subtasks: true,
-        },
-        orderBy: { priority: 'desc' },
-      });
-
-      return NextResponse.json({
-        success: true,
-        tasks,
-        count: tasks.length,
-      });
+    if (listId) {
+      return NextResponse.json(await getTasks(listId, status, includeCompleted));
     }
 
-    // Return all tasks or filtered by status
-    const statusFilter = searchParams.get('status') as TaskStatus | null;
+    if (query) {
+      return NextResponse.json(await searchTasks(query, includeCompleted));
+    }
 
-    const where = statusFilter
-      ? { status: statusFilter }
-      : {};
-
-    const tasks = await prisma.task.findMany({
-      where,
-      include: {
-        agent: true,
-        parent: true,
-        subtasks: true,
-      },
-      orderBy: { priority: 'desc' },
-    });
-
-    return NextResponse.json({
-      success: true,
-      tasks,
-      count: tasks.length,
-    });
+    return NextResponse.json(await getTasks());
   } catch (error) {
-    console.error('Error fetching tasks:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch tasks' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const {
-      description,
-      priority,
-      status = TaskStatus.PENDING,
-      userId,
-      allowedContexts,
-      deadline,
-      estimatedDuration,
-      tags,
-    } = body;
-
-    // Validate required fields
-    if (!description || priority === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Description and priority are required' },
-        { status: 400 }
-      );
+    if (body.action === 'create') {
+      return NextResponse.json(await createTask(body.data));
+    }
+    if (body.action === 'createSubtask') {
+      return NextResponse.json(await createSubtask(body.taskId, body.data));
+    }
+    if (body.action === 'createReminder') {
+      return NextResponse.json(await createReminder(body.taskId, body.time));
+    }
+    if (body.action === 'createBackup') {
+      return NextResponse.json(await createBackup(body.description));
+    }
+    if (body.action === 'createTemplate') {
+      return NextResponse.json(await createTemplate(body.name, body.description, body.listId, body.templateData));
+    }
+    if (body.action === 'addDependency') {
+      return NextResponse.json(await addTaskDependency(body.taskId, body.dependsOnTaskId));
+    }
+    if (body.action === 'startTimeEntry') {
+      return NextResponse.json(await startTimeEntry(body.taskId, body.startedAt));
+    }
+    if (body.action === 'googleCalendar') {
+      return NextResponse.json(await addGoogleCalendarEvent(body.taskId, body.summary, body.description, body.start, body.end));
+    }
+    if (body.action === 'slack') {
+      return NextResponse.json(await addSlackNotification(body.taskId, body.message));
+    }
+    if (body.action === 'emailReminder') {
+      return NextResponse.json(await scheduleEmailReminder(body.taskId, body.email, body.message, body.sendAt));
+    }
+    if (body.action === 'nlp') {
+      return NextResponse.json(await createTaskFromNLP(body.text, body.listId));
+    }
+    if (body.action === 'voice') {
+      return NextResponse.json(await createTaskFromVoice(body.text, body.listId));
     }
 
-    // Create task in database
-    const task = await prisma.task.create({
-      data: {
-        description,
-        priority: Number(priority),
-        status,
-        allowedContexts: allowedContexts || [],
-        deadline: deadline ? new Date(deadline) : null,
-        estimatedDuration: estimatedDuration ? Number(estimatedDuration) : null,
-        tags: tags || [],
-        createdBy: userId ? { connect: { id: userId } } : undefined,
-      },
-      include: {
-        agent: true,
-        parent: true,
-        subtasks: true,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      task,
-      message: 'Task created successfully',
-    });
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error('Error creating task:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to create task' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
   }
 }
 
-export async function PUT(request: Request) {
-  try {
-    const body = await request.json();
-    const { id, ...updateData } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Task ID is required' },
-        { status: 400 }
-      );
-    }
-
-    // Prepare update data
-    const updatePayload: any = {};
-
-    if (updateData.description !== undefined) updatePayload.description = updateData.description;
-    if (updateData.priority !== undefined) updatePayload.priority = Number(updateData.priority);
-    if (updateData.status !== undefined) updatePayload.status = updateData.status;
-    if (updateData.allowedContexts !== undefined) updatePayload.allowedContexts = updateData.allowedContexts;
-    if (updateData.deadline !== undefined) updatePayload.deadline = updateData.deadline ? new Date(updateData.deadline) : null;
-    if (updateData.estimatedDuration !== undefined) updatePayload.estimatedDuration = Number(updateData.estimatedDuration);
-    if (updateData.tags !== undefined) updatePayload.tags = updateData.tags;
-
-    const task = await prisma.task.update({
-      where: { id },
-      data: updatePayload,
-      include: {
-        agent: true,
-        parent: true,
-        subtasks: true,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      task,
-      message: 'Task updated successfully',
-    });
-  } catch (error) {
-    console.error('Error updating task:', error);
-    if (error instanceof prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return NextResponse.json(
-        { success: false, error: 'Task not found' },
-        { status: 404 }
-      );
-    }
-    return NextResponse.json(
-      { success: false, error: 'Failed to update task' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const taskId = searchParams.get('taskId');
+    const subtaskId = searchParams.get('subtaskId');
 
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'Task ID is required' },
-        { status: 400 }
-      );
+    if (subtaskId) {
+      const body = await request.json();
+      return NextResponse.json(await updateSubtask(subtaskId, body));
     }
 
-    // Soft delete: set status to 'failed' instead of removing
-    const task = await prisma.task.update({
-      where: { id },
-      data: { status: TaskStatus.FAILED },
-      include: {
-        agent: true,
-        parent: true,
-        subtasks: true,
-      },
-    });
+    if (taskId) {
+      const body = await request.json();
+      return NextResponse.json(await updateTask(parseInt(taskId), body));
+    }
 
-    return NextResponse.json({
-      success: true,
-      task,
-      message: 'Task marked as failed',
-    });
+    return NextResponse.json({ error: 'Task ID or Subtask ID required' }, { status: 400 });
   } catch (error) {
-    console.error('Error deleting task:', error);
-    if (error instanceof prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      return NextResponse.json(
-        { success: false, error: 'Task not found' },
-        { status: 404 }
-      );
+    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const taskId = searchParams.get('taskId');
+    const subtaskId = searchParams.get('subtaskId');
+
+    if (subtaskId) {
+      await deleteSubtask(parseInt(subtaskId));
+      return NextResponse.json({ success: true });
     }
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete task' },
-      { status: 500 }
-    );
+
+    if (taskId) {
+      await deleteTask(parseInt(taskId));
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'Task ID or Subtask ID required' }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const taskId = searchParams.get('taskId');
+
+    if (taskId && searchParams.get('action') === 'complete') {
+      return NextResponse.json(await toggleTaskComplete(parseInt(taskId)));
+    }
+
+    if (taskId && searchParams.get('action') === 'start-time') {
+      const body = await request.json();
+      return NextResponse.json(await startTimeEntry(parseInt(taskId), body.startedAt));
+    }
+
+    if (taskId && searchParams.get('action') === 'stop-time') {
+      const body = await request.json();
+      return NextResponse.json(await stopTimeEntry(parseInt(taskId), body.stoppedAt, body.durationMinutes));
+    }
+
+    if (taskId && searchParams.get('action') === 'complete-subtask') {
+      const subtaskId = searchParams.get('subtaskId');
+      if (subtaskId) {
+        return NextResponse.json(await toggleSubtaskComplete(parseInt(subtaskId)));
+      }
+    }
+
+    return NextResponse.json({ error: 'Invalid PATCH request' }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to patch task' }, { status: 500 });
+  }
+}
+
+export async function GET_SUBTASKS(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const taskId = searchParams.get('taskId');
+
+    if (taskId) {
+      return NextResponse.json(await getSubtasks(parseInt(taskId)));
+    }
+
+    return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch subtasks' }, { status: 500 });
   }
 }
