@@ -25,7 +25,7 @@ interface AgentContext {
 }
 
 // AgentDiscoveryCommand
-interface AgentDiscoveryCommand {
+export interface AgentDiscoveryCommand {
   type: 'AGENT_DISCOVERY';
   metadata: {
     stage: 'initial' | 'renewal' | 'context_share';
