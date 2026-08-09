@@ -14,6 +14,7 @@ import type { Task, List, Label, TaskWithDetails, TaskFormData, RecurringPattern
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { useKeyboardShortcuts } from "@/lib/hooks/use-keyboard-shortcuts"
+import { OnboardingWrapper } from "@/components/onboarding/OnboardingWrapper"
 
 export default function DashboardPage() {
   const searchParams = useSearchParams()
@@ -49,11 +50,17 @@ export default function DashboardPage() {
       if (listId) {
         tasksData = await getTasksByListId(parseInt(listId), showCompleted)
       } else if (labelId) {
-        // For now, get all tasks and filter by label
+        // Get all tasks and filter by label
         tasksData = await getTasks(showCompleted)
-        tasksData = tasksData.filter(() => {
-          // TODO: Implement label filtering
-          return true
+        const parsedLabelId = parseInt(labelId)
+        tasksData = tasksData.filter((task) => {
+          if (!task.labels) return false
+          // Check both label object and label ID
+          if (typeof task.labels[0] === 'object') {
+            return task.labels.some((l: any) => l.id === parsedLabelId)
+          }
+          // String label IDs
+          return task.labels.some((l: any) => String(l) === String(parsedLabelId))
         })
       } else {
         switch (view) {
@@ -198,11 +205,11 @@ export default function DashboardPage() {
 
   // Reorder tasks - handle drag and drop
   const handleTaskReorder = async (newOrder: Task[]) => {
-    // Update task order in the database
-    for (let i = 0; i < newOrder.length; i++) {
-      const task = newOrder[i]
-      await updateTask(task.id, { order: i })
-    }
+    // Update task order in the database using batch operation
+    const updatePromises = newOrder.map((task, index =>
+      updateTask(task.id, { order: index })
+    ));
+    await Promise.all(updatePromises);
   }
 
   const handleSearch = (query: string) => {
