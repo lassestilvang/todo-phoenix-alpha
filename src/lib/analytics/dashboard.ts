@@ -1,4 +1,4 @@
-import type { Task, TaskWithDetails, TimeEntry } from '@/lib/types';
+import type { Task, TaskWithDetails, TimeEntry } from '@/types';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 
 export interface ProductivityMetrics {
@@ -264,7 +264,93 @@ export class AnalyticsDashboard {
       insights.push(`You use recurring tasks frequently (${recurringTasks} tasks). This helps build consistent habits.`);
     }
 
+    // New: Priority distribution insight
+    const topPriority = this.getTopPriorities()[0];
+    if (topPriority) {
+      insights.push(`Your most common priority is ${topPriority.priority} (${topPriority.count} tasks).`);
+    }
+
+    // New: Time tracking insight
+    const totalHours = Math.round(metrics.averageTimePerTask * metrics.totalTasks / 60);
+    insights.push(`You've tracked approximately ${totalHours} hours of task work this period.`);
+
     return insights;
+  }
+
+  /**
+   * Get detailed weekly pattern analysis
+   */
+  getWeeklyPattern(): { dayOfWeek: string; tasksCreated: number; tasksCompleted: number }[] {
+    const now = new Date();
+    const patterns = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return patterns.map(day => {
+      const dayTasks = this.tasks.filter((t) => {
+        const taskDate = new Date(t.created_at);
+        return taskDate.toLocaleDateString('en-US', { weekday: 'long' }) === day;
+      });
+      return {
+        dayOfWeek: day,
+        tasksCreated: dayTasks.length,
+        tasksCompleted: dayTasks.filter((t) => t.is_completed > 0).length,
+      };
+    });
+  }
+
+  /**
+   * Get monthly trend data
+   */
+  getMonthlyTrends(): { month: string; tasksCreated: number; tasksCompleted: number; timeSpent: number }[] {
+    const now = new Date();
+    const months = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const date = subDays(now, i * 30);
+      const monthName = format(date, 'MMM yyyy');
+
+      const monthTasks = this.tasks.filter((t) => {
+        const taskDate = new Date(t.created_at);
+        return format(taskDate, 'MMM yyyy') === format(date, 'MMM yyyy');
+      });
+
+      const monthEntries = this.timeEntries.filter((e) => {
+        const entryDate = new Date(e.started_at);
+        return format(entryDate, 'MMM yyyy') === format(date, 'MMM yyyy');
+      });
+
+      const timeSpent = monthEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+
+      months.push({
+        month: monthName,
+        tasksCreated: monthTasks.length,
+        tasksCompleted: monthTasks.filter((t) => t.is_completed > 0).length,
+        timeSpent,
+      });
+    }
+
+    return months;
+  }
+
+  /**
+   * Get efficiency score (0-100)
+   */
+  getEfficiencyScore(): number {
+    const metrics = this.calculateProductivityMetrics();
+    let score = 0;
+
+    // Completion rate contributes 40%
+    score += metrics.taskCompletionRate * 0.4;
+
+    // Deadline accuracy contributes 30%
+    score += metrics.deadlineAccuracy * 0.3;
+
+    // Low overdue rate contributes 20% (inverted)
+    const overdueRate = metrics.totalTasks > 0 ? metrics.overdueTasks / metrics.totalTasks : 0;
+    score += (1 - overdueRate) * 0.2;
+
+    // Productivity contributes 10% (normalized)
+    score += Math.min(metrics.averageTimePerTask / 120, 1) * 100 * 0.1;
+
+    return Math.round(score);
   }
 
   /**
