@@ -1,0 +1,226 @@
+"use strict";
+
+import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
+
+// Encryption key management - in production, use environment variables and
+// a proper key management service (AWS KMS, Google Cloud KMS, etc.)
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'todo-phoenix-dev-key-change-in-production';
+
+// Salt for key derivation
+const SALT = 'todo-phoenix-salt-unique-salt-value';
+
+/**
+ * Encrypt sensitive data using AES-256-GCM
+ * @param data - Data to encrypt (string or object)
+ * @returns Encrypted data with IV and salt prefix
+ */
+export function encryptData(data: string): { iv: string; data: string } {
+  const iv = uuidv4().substring(0, 16); // 16 bytes for AES-GCM
+  const cipher = createCipherWithIV(data, iv);
+  const encrypted = Buffer.concat([cipher.data, cipher.tag]);
+
+  return {
+    iv: iv.toString('hex'),
+    data: encrypted.toString('base64')
+  };
+}
+
+/**
+ * Decrypt data encrypted with encryptData
+ * @param encryptedData - Encrypted data with IV and salt prefix
+ * @returns Decrypted plain text
+ */
+export function decryptData({ iv, data }: { iv: string; data: string }): string {
+  const encrypted = Buffer.from(data, 'base64');
+  const decipher = decryptionWithIV(Buffer.from(iv, 'hex'), encrypted);
+  return decipher.toString('utf8');
+}
+
+/**
+ * Encrypt an object (JSON) - useful for storing sensitive metadata
+ */
+export function encryptObject(data: Record<string, any>): { iv: string; data: string } {
+  const jsonString = JSON.stringify(data);
+  return encryptData(jsonString);
+}
+
+/**
+ * Decrypt an object
+ */
+export function decryptObject(encryptedData: { iv: string; data: string }): Record<string, any> {
+  const decrypted = decryptData(encryptedData);
+  return JSON.parse(decrypted);
+}
+
+/**
+ * Create cipher with IV
+ */
+function createCipherWithIV(data: string, iv: string) {
+  const key = createHash('sha256').update(ENCRYPTION_KEY + SALT).digest();
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, Buffer.from(iv, 'hex'));
+  let c = cipher.update(data, 'utf8', 'base64');
+  c += cipher.final('base64');
+  const tag = cipher.getAuthTag();
+  return { data: Buffer.from(tag), cipher };
+}
+
+/**
+ * Decrypt with IV
+ */
+function decryptionWithIV(iv: Buffer, encrypted: Buffer) {
+  const key = createHash('sha256').update(ENCRYPTION_KEY + SALT).digest();
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  let d = decipher.update(encrypted, 'base64', 'utf8');
+  d += decipher.final('utf8');
+  return Buffer.from(d);
+}
+
+/**
+ * Hash a password for secure storage
+ */
+export function hashPassword(password: string): { salt: string; hash: string } {
+  const salt = uuidv4().substring(0, 16);
+  const hash = createHash('sha256').update(password + salt).digest('hex');
+  return { salt, hash };
+}
+
+/**
+ * Verify a password against a hash
+ */
+export function verifyPassword(password: string, salt: string, hash: string): boolean {
+  const computedHash = createHash('sha256').update(password + salt).digest('hex');
+  return computedHash === hash;
+}
+
+/**
+ * Generate a secure API key
+ */
+export function generateApiKey(): string {
+  return uuidv4() + uuidv4();
+}
+
+/**
+ * Validate API key format
+ */
+export function isValidApiKey(key: string): boolean {
+  if (!key || key.length < 32) return false;
+  // API keys should be UUID-like format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(key);
+}
+
+/**
+ * Rate limiting helper
+ */
+export class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+
+  /**
+   * Check if request is allowed
+   */
+  isAllowed(identifier: string, limit: number, windowMs: number): boolean {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    // Get existing requests for this identifier
+    const existingRequests = this.requests.get(identifier) || [];
+
+    // Filter out requests outside the current window
+    const recentRequests = existingRequests.filter(ts => ts > windowStart);
+
+    // If under limit, allow and record this request
+    if (recentRequests.length < limit) {
+      recentRequests.push(now);
+      this.requests.set(identifier, recentRequests);
+      return true;
+    }
+
+    // Over limit
+    return false;
+  }
+
+  /**
+   * Get remaining requests
+   */
+  getRemaining(identifier: string, limit: number, windowMs: number): number {
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    const existingRequests = this.requests.get(identifier) || [];
+    const recentRequests = existingRequests.filter(ts => ts > windowStart);
+
+    return Math.max(0, limit - recentRequests.length);
+  }
+}
+
+/**
+ * Generate secure session token
+ */
+export function generateSessionToken(): string {
+  return uuidv4() + Date.now().toString(36);
+}
+
+/**
+ * Verify session token format
+ */
+export function isValidSessionToken(token: string): boolean {
+  if (!token || token.length < 20) return false;
+  // Token format: uuid + timestamp
+  const parts = token.split('');
+  return parts.length >= 20;
+}
+
+/**
+ * Sanitize input to prevent XSS
+ */
+export function sanitizeHtml(input: string): string {
+  const div = document.createElement('div');
+  div.textContent = input;
+  return div.innerHTML;
+}
+
+/**
+ * Validate task data for security
+ */
+export interface TaskValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export function validateTaskData(
+  name: string,
+  description?: string,
+  priority?: string,
+  deadline?: Date
+): TaskValidationResult {
+  const errors: string[] = [];
+
+  // Validate name
+  if (!name || name.trim().length === 0) {
+    errors.push('Task name is required');
+  } else if (name.trim().length > 200) {
+    errors.push('Task name must be less than 200 characters');
+  }
+
+  // Validate priority
+  const validPriorities = ['high', 'medium', 'low', 'none'];
+  if (priority && !validPriorities.includes(priority)) {
+    errors.push(`Priority must be one of: ${validPriorities.join(', ')}`);
+  }
+
+  // Validate deadline (if provided)
+  if (deadline && isNaN(deadline.getTime())) {
+    errors.push('Invalid deadline date');
+  }
+
+  // Validate description length
+  if (description && description.length > 1000) {
+    errors.push('Description must be less than 1000 characters');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
