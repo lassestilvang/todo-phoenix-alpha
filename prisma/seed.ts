@@ -22,25 +22,27 @@ async function main() {
         name: 'AlphaAgent',
         version: '1.0.0',
         capabilities: { deep_work: true, creative: true, interrupt_handling: true, context_sharing: true, data_analysis: true },
-        resourceAllocation: { cpu_power: 10, memory_gb: 4 },
+        availabilityScore: 90,
+        focusLevel: 80,
+        energyLevel: 85,
       },
       {
-        data: {
-          id: 'agent-beta',
-          name: 'BetaAgent',
-          version: '1.0.0',
-          capabilities: { deep_work: true, creative: true, interrupt_handling: true, context_sharing: true, data_analysis: true },
-          resourceAllocation: { cpu_power: 8, memory_gb: 8 },
-        },
-      }),
+        id: 'agent-beta',
+        name: 'BetaAgent',
+        version: '1.0.0',
+        capabilities: { deep_work: true, creative: true, interrupt_handling: true, context_sharing: true, data_analysis: true },
+        availabilityScore: 85,
+        focusLevel: 75,
+        energyLevel: 80,
+      },
       {
-        data: {
-          id: 'agent-gamma',
-          name: 'GammaAgent',
-          version: '1.0.0',
-          capabilities: { deep_work: true, context_sharing: true, data_analysis: true },
-          resourceAllocation: { cpu_power: 6, memory_gb: 4 },
-        },
+        id: 'agent-gamma',
+        name: 'GammaAgent',
+        version: '1.0.0',
+        capabilities: { deep_work: true, context_sharing: true, data_analysis: true },
+        availabilityScore: 80,
+        focusLevel: 70,
+        energyLevel: 75,
       },
     ]);
 
@@ -64,13 +66,13 @@ async function main() {
     const recurringPatterns = await prisma.recurringPattern.create({
       data: {
         id: uuidv4(),
-        type: 'daily',
+        type: 'Daily',
         interval: 1,
-        scope: 'task',
-        resourceProfile: { cpu: 0.1, memory_gb: 0.5 },
-        validity: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        hourOfDay: 9,
+        minuteOfHour: 0,
+        description: 'Daily recurring task pattern',
+        confidence: 0.9,
       },
-    });
 
     console.log('✅ Seeded recurring patterns');
 
