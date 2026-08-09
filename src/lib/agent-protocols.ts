@@ -10,6 +10,20 @@
 
 import { v4 as uuidv4 } from 'uuid';
 
+// Type definitions for the lifecycle events
+interface AgentRegistration {
+  agentId: string;
+  capabilities: string[];
+  metadata?: Record<string, unknown>;
+}
+
+interface AgentContext {
+  agentId: string;
+  currentTask?: string;
+  status: 'idle' | 'working' | 'paused' | 'offline';
+  metadata?: Record<string, unknown>;
+}
+
 // AgentDiscoveryCommand
 interface AgentDiscoveryCommand {
   type: 'AGENT_DISCOVERY';
@@ -30,7 +44,7 @@ export function createAgentDiscoveryCommand(agent_capabilities: string[]): Agent
       capabilities: agent_capabilities,
       contention_id: Math.random().toString(36).substring(2, 15),
       legacy_support: true
-    };
+    }
   };
 }
 
@@ -169,13 +183,13 @@ interface LifeCycleEvents {
 }
 
 // Notification Skeleton
-interface AgentNotificatioLessInterface extends LifeCycleEvents {
+interface AgentNotificationInterface extends LifeCycleEvents {
   readonly _expiry: number;
   readonly _initialization_phase: boolean;
   readonly _call_counter: number;
   readonly _heartbeat_timer: NodeJS.Timeout;
 }
-export const agentLifeCycle: AgentNotificatioLessInterface = {
+export const agentLifeCycle: AgentNotificationInterface = {
   registerAgent: () => console.log('registerAgent called'),
   startWork: () => console.log('startWork called'),
   broadcastStatus: () => console.log('broadcastStatus called'),
