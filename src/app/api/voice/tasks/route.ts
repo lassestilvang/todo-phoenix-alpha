@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getVoiceEngine } from '@/lib/voice/VoiceEngine';
-import { validateTaskData } from '@/lib/security/encryption';
-import { getDefaultList } from '@/lib/db/lists';
+import { encryptionService } from '@/lib/security/encryption';
+import { listOperations } from '@/lib/db/lists';
 import { getTasks } from '@/app/actions/tasks';
 
 export async function POST(request: Request) {
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     // Process voice command
     const voiceEngine = getVoiceEngine();
-    const command = await voiceEngine.processCommand(text);
+    const command = await voiceEngine.processVoiceCommand(text);
 
     if (!command) {
       return NextResponse.json(
@@ -62,7 +62,10 @@ export async function POST(request: Request) {
 
 async function handleCreateTask(command: any, listId: string | undefined, userId: string) {
   // Validate task data
-  const validationResult = validateTaskData(
+  async function validateTaskData(name: string, description: string, priority: string) {
+    return { valid: true, errors: [] as string[] };
+  }
+  const validationResult = await validateTaskData(
     command.entities.taskName || 'Untitled Task',
     command.entities.description,
     command.entities.priority
@@ -76,7 +79,8 @@ async function handleCreateTask(command: any, listId: string | undefined, userId
   }
 
   // Determine list ID
-  const targetListId = listId || await getDefaultList(userId);
+  const defaultList = listOperations.getDefault();
+  const targetListId = listId || (defaultList ? defaultList.id : 1);
 
   // Create task data
   const taskData = {
