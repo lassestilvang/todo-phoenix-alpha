@@ -42,7 +42,7 @@ export async function GET(request: Request) {
             id: a.id,
             name: a.name,
             availability: a.availability_score,
-            current_task: a.currentTaskId,
+            current_task: (a as any).currentTaskId,
           })),
           queue_size: os.global_queue.queue.size,
           active_locks: os.active_locks.size,
