@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { useConflictArbiter } from '@/lib/conflict-arbiter';
+import { getConflictArbiter } from '@/lib/conflict-arbiter';
 import { useAgentOS } from '@/lib/agent-os';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
 
-  const conflictArbiter = useConflictArbiter();
+  const conflictArbiter = getConflictArbiter();
 
   switch (action) {
     case 'active':
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { action, ...params } = body;
 
-  const conflictArbiter = useConflictArbiter();
+  const conflictArbiter = getConflictArbiter();
   const agentOS = useAgentOS.getState();
 
   switch (action) {
