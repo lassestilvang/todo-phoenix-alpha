@@ -1,4 +1,4 @@
-// "use server"
+"use server"
 
 import { revalidatePath } from "next/cache"
 import db from "@/lib/db/schema"
@@ -81,11 +81,10 @@ export async function createReminder(taskId: number, reminderTime: Date): Promis
   const reminder = db.prepare(`SELECT * FROM reminders WHERE id = ?`).get(reminderId);
   return {
     id: reminder.id,
-    taskId: reminder.task_id,
-    time: new Date(reminder.time),
+    task_id: reminder.task_id,
+    time: reminder.time,
     is_sent: reminder.is_sent,
     sent_at: reminder.sent_at,
-    created_at: reminder.created_at,
   };
 }
 
@@ -96,13 +95,12 @@ export async function getPendingReminders(): Promise<Reminder[]> {
     WHERE is_sent = 0 AND time <= ?
   `).all(now);
 
-  return pendingReminders.map(r => ({
+  return pendingReminders.map((r: any) => ({
     id: r.id,
-    taskId: r.task_id,
-    time: new Date(r.time),
+    task_id: r.task_id,
+    time: r.time,
     is_sent: r.is_sent,
     sent_at: r.sent_at,
-    created_at: r.created_at,
   }));
 }
 
@@ -196,7 +194,7 @@ export async function getRecurringTaskRuns(
     ORDER BY scheduled_date ASC
   `).all(taskId);
 
-  return rows.map(r => ({
+  return rows.map((r: any) => ({
     scheduledDate: r.scheduled_date,
     actualDate: r.actual_date ? new Date(r.actual_date).toISOString().split('T')[0] : null,
     status: r.status,
@@ -245,7 +243,7 @@ export async function getTimerStats(): Promise<Record<string, number>> {
     GROUP BY task_id
   `).all();
 
-  const stats = rows.map(row => ({
+  const stats = rows.map((row: any) => ({
     taskId: row.task_id,
     totalEntries: row.total_entries,
     running: row.running,
@@ -334,17 +332,20 @@ export async function deleteSubtask(id: number) {
 
 // Time entry actions
 export async function getTimeEntries(taskId: number) {
-  return timeEntryOperations.getAll(taskId)
+  return timeEntryOperations.getAllForTask(taskId)
 }
 
 export async function startTimeEntry(taskId: number) {
-  const timeEntry = timeEntryOperations.create(taskId, new Date())
+  const timeEntry = timeEntryOperations.create({
+    taskId: taskId,
+    startedAt: new Date().toISOString()
+  })
   revalidatePath("/")
   return timeEntry
 }
 
-export async function stopTimeEntry(id: number, stoppedAt: Date, durationMinutes: number) {
-  const timeEntry = timeEntryOperations.stop(id, stoppedAt, durationMinutes)
+export async function stopTimeEntry(id: number) {
+  const timeEntry = timeEntryOperations.stop(id)
   revalidatePath("/")
   return timeEntry
 }
@@ -373,7 +374,7 @@ export async function createTaskFromNLP(text: string, listId: number): Promise<T
     const taskWithDetails = taskOperations.getByIdWithDetails(task.id);
     if (taskWithDetails?.deadline) {
       try {
-        reminderOperations.create(task.id, new Date(taskWithDetails.deadline));
+        reminderOperations.create(task.id, new Date(taskWithDetails.deadline).toISOString());
       } catch (e) {
         console.error('Failed to create reminder:', e);
       }
@@ -387,8 +388,15 @@ export async function createTaskFromNLP(text: string, listId: number): Promise<T
 // NEW: Add AI-powered suggestions for a task
 export async function getTaskSuggestions(taskId: number): Promise<{
   priority: string;
-  estimatedMinutes: number;
+  suggestedTimeEstimate: number;
+  suggestedDate: string | null;
   relatedTasks: number[];
+  confidence: number;
+  predictiveSchedule?: {
+    startDate: Date;
+    optimalStartTime: string;
+    confidence: number;
+  };
 }> {
   const task = taskOperations.getByIdWithDetails(taskId)
   if (!task) throw new Error('Task not found');
@@ -447,9 +455,10 @@ export async function addAttachmentToTask(
 
 // NEW: Get pending reminders (for notifications)
 export async function exportDatabaseAsJson(): Promise<{ backupId: number; filePath: string }> {
-  const backupPath = await createBackup('full', 'Database backup', 0);
+  const backupPath = await createBackup('Database backup');
+  const parts = backupPath.split('-').pop();
   return {
-    backupId: Number(backupPath.split('-').pop().split('.')[0]),
+    backupId: parts ? Number(parts.split('.')[0]) : 0,
     filePath: backupPath,
   };
 }
