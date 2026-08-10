@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -112,9 +112,7 @@ export function TaskDetailModal({
         )}
       >
         {isMobile ? (
-          // Mobile Layout - Swipeable Tabs
           <div className="flex flex-col h-full">
-            {/* Header with Back Button */}
             <div className="flex items-center justify-between p-3 border-b">
               <Button variant="ghost" size="sm" onClick={onClose}>
                 <X className="h-4 w-4" />
@@ -138,52 +136,53 @@ export function TaskDetailModal({
             </ScrollArea>
           </div>
         ) : (
-          // Desktop Layout - Original
-          <DialogHeader>
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <DialogTitle className="text-2xl">{task.name}</DialogTitle>
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge
-                    variant="outline"
-                    className={priorityColors[task.priority]}
-                  >
-                    {priorityLabels[task.priority]}
-                  </Badge>
-                  {task.list && (
-                    <Badge variant="outline">
-                      {task.list.emoji} {task.list.name}
+          <div className="flex flex-col h-full">
+            <DialogHeader>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <DialogTitle className="text-2xl">{task.name}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge
+                      variant="outline"
+                      className={priorityColors[task.priority]}
+                    >
+                      {priorityLabels[task.priority]}
                     </Badge>
-                  )}
-                  {isOverdue && (
-                    <Badge variant="destructive">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      Overdue
-                    </Badge>
-                  )}
+                    {task.list && (
+                      <Badge variant="outline">
+                        {task.list.emoji} {task.list.name}
+                      </Badge>
+                    )}
+                    {isOverdue && (
+                      <Badge variant="destructive">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Overdue
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                <Button variant="ghost" size="icon" onClick={onClose}>
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </DialogHeader>
+            </DialogHeader>
 
-          <ScrollArea className="flex-1">
-            <div className="space-y-6">
-              <MobileTaskContent
-                task={task}
-                isOverdue={isOverdue}
-                priorityColors={priorityColors}
-                priorityLabels={priorityLabels}
-                activeTab={activeTab}
-                onStartTimer={handleStartTimer}
-                onStopTimer={handleStopTimer}
-                attachedFile={attachedFile}
-                handleFileUpload={handleFileUpload}
-              />
-            </div>
-          </ScrollArea>
+            <ScrollArea className="flex-1">
+              <div className="p-6 space-y-6">
+                <MobileTaskContent
+                  task={task}
+                  isOverdue={isOverdue}
+                  priorityColors={priorityColors}
+                  priorityLabels={priorityLabels}
+                  activeTab={activeTab}
+                  onStartTimer={handleStartTimer}
+                  onStopTimer={handleStopTimer}
+                  attachedFile={attachedFile}
+                  handleFileUpload={handleFileUpload}
+                />
+              </div>
+            </ScrollArea>
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -224,7 +223,7 @@ function MobileTaskContent({
             <Timer className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Timer</p>
-              <p className="font-mono font-medium">{formatTime(30)}</p>
+              <p className="font-mono font-medium">{formatTime(elapsedSeconds)}</p>
             </div>
           </div>
 
