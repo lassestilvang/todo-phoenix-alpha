@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTasks, createTask, updateTask, deleteTask, toggleTaskComplete, searchTasks, getSubtasks, createSubtask, updateSubtask, toggleSubtaskComplete, deleteSubtask, getTimeEntries, startTimeEntry, stopTimeEntry, getActiveTimeEntry, getTotalTimeForTask, createTaskFromNLP, getTaskSuggestions, addAttachmentToTask, createReminder, createTaskFromVoice, exportDatabaseAsJson, createBackup, listBackups, addGoogleCalendarEvent, addSlackNotification, scheduleEmailReminder, getExternalIntegrations, deleteExternalIntegration, getTaskDependencies, addTaskDependency, removeTaskDependency, getDependentTasks, getDependencyChain, validateDependencies, getSmartTemplates, createTemplate } from '@/app/actions/tasks';
+import { getTasks, getTasksByListId, createTask, updateTask, deleteTask, toggleTaskComplete, searchTasks, getSubtasks, createSubtask, updateSubtask, toggleSubtaskComplete, deleteSubtask, getTimeEntries, startTimeEntry, stopTimeEntry, getActiveTimeEntry, getTotalTimeForTask, createTaskFromNLP, getTaskSuggestions, addAttachmentToTask, createReminder, createTaskFromVoice, exportDatabaseAsJson, createBackup, listBackups, addGoogleCalendarEvent, addSlackNotification, scheduleEmailReminder, getExternalIntegrations, deleteExternalIntegration, getTaskDependencies, addTaskDependency, removeTaskDependency, getDependentTasks, getDependencyChain, validateDependencies, getSmartTemplates, createTemplate } from '@/app/actions/tasks';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('query');
 
     if (listId) {
-      return NextResponse.json(await getTasks(listId, status, includeCompleted));
+      return NextResponse.json(await getTasksByListId(parseInt(listId), includeCompleted));
     }
 
     if (query) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(await addTaskDependency(body.taskId, body.dependsOnTaskId));
     }
     if (body.action === 'startTimeEntry') {
-      return NextResponse.json(await startTimeEntry(body.taskId, body.startedAt));
+      return NextResponse.json(await startTimeEntry(body.taskId));
     }
     if (body.action === 'googleCalendar') {
       return NextResponse.json(await addGoogleCalendarEvent(body.taskId, body.summary, body.description, body.start, body.end));
@@ -78,7 +78,7 @@ export async function PUT(request: NextRequest) {
 
     if (subtaskId) {
       const body = await request.json();
-      return NextResponse.json(await updateSubtask(subtaskId, body));
+      return NextResponse.json(await updateSubtask(parseInt(subtaskId), body));
     }
 
     if (taskId) {
@@ -124,13 +124,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (taskId && searchParams.get('action') === 'start-time') {
-      const body = await request.json();
-      return NextResponse.json(await startTimeEntry(parseInt(taskId), body.startedAt));
+      return NextResponse.json(await startTimeEntry(parseInt(taskId)));
     }
 
     if (taskId && searchParams.get('action') === 'stop-time') {
-      const body = await request.json();
-      return NextResponse.json(await stopTimeEntry(parseInt(taskId), body.stoppedAt, body.durationMinutes));
+      return NextResponse.json(await stopTimeEntry(parseInt(taskId)));
     }
 
     if (taskId && searchParams.get('action') === 'complete-subtask') {
