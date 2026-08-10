@@ -79,6 +79,15 @@ export type AgentOSState = {
     focusLevel: number;
     energyLevel: number;
     availableSince: number;
+    lastHeartbeat: number;
+    workField: string;
+    lastConflict?: {
+      taskId: string;
+      conflictType: 'lock_contention' | 'context_merge' | 'priority_ambiguity';
+      resolved: boolean;
+      resolution?: string;
+      timestamp: number;
+    };
   }>;
 };
 
