@@ -1,43 +1,18 @@
-"use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import {
-  Bot,
-  Play,
-  Pause,
-  Settings,
-  Activity,
-  DollarSign,
-  Users,
-  Shield,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  TrendingUp,
-  Brain,
-  Cpu,
-  Globe,
-  Search,
-  Star,
-  Download,
-  Upload,
-  Trash2,
-  Plus,
-  Edit,
-} from 'lucide-react';
+import { Bot, Play, Settings, Activity, Users, Shield, Clock, CheckCircle, TrendingUp, Brain, Cpu, Globe, Search, Star, Download, Trash2, CalendarDays, Calendar, AlertCircle, FileText, ListOrdered, MessageSquare, Bell, Lightbulb, Target, BarChart3, AlertTriangle } from 'lucide-react';
+import { agentService } from '@/lib/marketplace/AgentService';
 
-interface AgentManifest {
+// Export types for use by AgentService and other modules
+export interface AgentManifest {
   id: string;
   name: string;
   description: string;
@@ -60,7 +35,7 @@ interface AgentManifest {
   isFeatured: boolean;
 }
 
-interface AgentInput {
+export interface AgentInput {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'file';
   description: string;
@@ -69,21 +44,21 @@ interface AgentInput {
   validation?: ValidationRule;
 }
 
-interface AgentOutput {
+export interface AgentOutput {
   name: string;
   type: 'task' | 'insight' | 'action' | 'data' | 'notification';
   description: string;
   schema?: any;
 }
 
-interface ValidationRule {
+export interface ValidationRule {
   min?: number;
   max?: number;
   pattern?: string;
   enum?: string[];
 }
 
-interface AgentPricing {
+export interface AgentPricing {
   model: 'free' | 'subscription' | 'paypercall' | 'freemium';
   price?: number;
   currency?: string;
@@ -91,7 +66,7 @@ interface AgentPricing {
   limits?: { [key: string]: number };
 }
 
-interface AgentRequirements {
+export interface AgentRequirements {
   minMemory?: string;
   maxMemory?: string;
   minCpu?: string;
@@ -99,7 +74,7 @@ interface AgentRequirements {
   permissions?: string[];
 }
 
-interface AgentSecurity {
+export interface AgentSecurity {
   sandbox: boolean;
   isolationLevel: 'low' | 'medium' | 'high';
   encryption?: boolean;
@@ -107,7 +82,7 @@ interface AgentSecurity {
   dataHandling: 'user_only' | 'internal' | 'public';
 }
 
-interface AgentStats {
+export interface AgentStats {
   usageCount: number;
   successRate: number;
   avgExecutionTime: number;
@@ -115,7 +90,7 @@ interface AgentStats {
   uptime: number;
 }
 
-interface AgentAuthor {
+export interface AgentAuthor {
   name: string;
   email: string;
   organization?: string;
@@ -123,7 +98,7 @@ interface AgentAuthor {
   verified: boolean;
 }
 
-interface AgentExecution {
+export interface AgentExecution {
   id: string;
   agentId: string;
   input: any;
@@ -177,29 +152,30 @@ const CAPABILITY_ICONS: Record<string, any> = {
   'sanitize-output': Shield,
 };
 
-// Other needed imports
-import {
-  CalendarDays,
-  Calendar,
-  AlertCircle,
-  FileText,
-  ListOrdered,
-  MessageSquare,
-  Bell,
-  Lightbulb,
-  CheckCircle,
-  Shield,
-} from 'lucide-react';
+const getCategoryIcon = (category: string) => {
+  const cat = AGENT_CATEGORIES.find((c) => c.value === category);
+  return cat?.icon || Bot;
+};
+
+const getSecurityColor = (level: string) => {
+  switch (level) {
+    case 'high': return 'bg-green-100 text-green-800';
+    case 'medium': return 'bg-yellow-100 text-yellow-800';
+    case 'low': return 'bg-gray-100 text-gray-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+};
 
 export function AgentRegistry() {
   const [agents, setAgents] = useState<AgentManifest[]>([]);
   const [filteredAgents, setFilteredAgents] = useState<AgentManifest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedSecurity, setSelectedSecurity] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
+  const [selectedSecurity, setSelectedSecurity] = useState<string | undefined>(undefined);
   const [installedAgents, setInstalledAgents] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<AgentManifest | null>(null);
+  const [executionAgent, setExecutionAgent] = useState<AgentManifest | null>(null);
 
   useEffect(() => {
     fetchAgents();
@@ -213,125 +189,17 @@ export function AgentRegistry() {
   const fetchAgents = async () => {
     setLoading(true);
     try {
-      // Simulated API call
-      const mockAgents: AgentManifest[] = [
-        {
-          id: 'email-summarizer',
-          name: 'Email Summarizer',
-          description: 'Analyzes emails and extracts actionable tasks',
-          version: '1.2.0',
-          category: 'productivity',
-          tags: ['email', 'summarization', 'tasks', 'automation'],
-          capabilities: ['parse-text', 'extract-tasks', 'priority-suggest', 'validate-input', 'sanitize-output'],
-          inputs: [
-            { name: 'emails', type: 'array', description: 'List of email contents', required: true },
-            { name: 'timeframe', type: 'string', description: 'Analysis period', required: false, default: 'today' },
-          ],
-          outputs: [
-            { name: 'tasks', type: 'task', description: 'Extracted tasks' },
-            { name: 'summary', type: 'data', description: 'Summary statistics' },
-          ],
-          pricing: { model: 'freemium', limits: { requests: 100, 'max-emails': 50 } },
-          requirements: { minMemory: '256MB', minCpu: '1 core' },
-          security: { sandbox: true, isolationLevel: 'medium', auditLogging: true, dataHandling: 'user_only' },
-          stats: { usageCount: 1250, successRate: 0.94, avgExecutionTime: 2.3, uptime: 0.98 },
-          author: { name: 'Todo Phoenix Labs', email: 'labs@todophoenix.ai', verified: true },
-          rating: 4.7,
-          installs: 1250,
-          health: 98,
-          lastUpdated: '2024-01-15',
-          isVerified: true,
-          isFeatured: true,
-        },
-        {
-          id: 'meeting-scheduler',
-          name: 'Meeting Scheduler',
-          description: 'Automatically schedules meetings based on calendar availability',
-          version: '0.9.1',
-          category: 'automation',
-          tags: ['calendar', 'scheduling', 'meetings', 'availability'],
-          capabilities: ['check-availability', 'find-slots', 'send-invitations'],
-          inputs: [
-            { name: 'attendees', type: 'array', description: 'List of attendees', required: true },
-            { name: 'preferences', type: 'object', description: 'Scheduling preferences', required: false },
-          ],
-          outputs: [
-            { name: 'meetings', type: 'task', description: 'Proposed meeting slots' },
-            { name: 'invitation', type: 'notification', description: 'Calendar invitation' },
-          ],
-          pricing: { model: 'subscription', price: 9.99, currency: 'USD', interval: 'month', limits: { 'max-attendees': 20 } },
-          requirements: { minMemory: '512MB', minCpu: '2 cores' },
-          security: { sandbox: true, isolationLevel: 'high', auditLogging: true, dataHandling: 'user_only' },
-          stats: { usageCount: 850, successRate: 0.89, avgExecutionTime: 5.1, uptime: 0.96 },
-          author: { name: 'CalendarPro', email: 'contact@calendarpro.com', verified: true },
-          rating: 4.5,
-          installs: 850,
-          health: 94,
-          lastUpdated: '2024-01-10',
-          isVerified: true,
-          isFeatured: false,
-        },
-        {
-          id: 'time-tracker',
-          name: 'Intelligent Time Tracker',
-          description: 'Tracks time spent on tasks with AI-powered categorization',
-          version: '2.1.0',
-          category: 'productivity',
-          tags: ['time-tracking', 'analytics', 'categorization', 'productivity'],
-          capabilities: ['track-time', 'categorize-activities', 'generate-reports'],
-          inputs: [
-            { name: 'activities', type: 'array', description: 'List of activities', required: true },
-            { name: 'project', type: 'string', description: 'Project context', required: false },
-          ],
-          outputs: [
-            { name: 'time-data', type: 'data', description: 'Processed time entries' },
-            { name: 'insights', type: 'insight', description: 'Productivity insights' },
-          ],
-          pricing: { model: 'free' },
-          requirements: { minMemory: '128MB', minCpu: '1 core' },
-          security: { sandbox: false, isolationLevel: 'low', auditLogging: true, dataHandling: 'user_only' },
-          stats: { usageCount: 2100, successRate: 0.92, avgExecutionTime: 1.8, uptime: 0.99 },
-          author: { name: 'TimeFlow', email: 'support@timeflow.app', verified: false },
-          rating: 4.3,
-          installs: 2100,
-          health: 99,
-          lastUpdated: '2024-01-20',
-          isVerified: false,
-          isFeatured: true,
-        },
-        {
-          id: 'task-prioritorizer',
-          name: 'Task Prioritizer',
-          description: 'AI-powered task prioritization based on deadlines, dependencies, and importance',
-          version: '1.5.0',
-          category: 'ai',
-          tags: ['prioritization', 'ai', 'dependencies', 'urgency'],
-          capabilities: ['analyze-tasks', 'calculate-priority', 'suggest-order'],
-          inputs: [
-            { name: 'tasks', type: 'array', description: 'List of tasks to prioritize', required: true },
-            { name: 'context', type: 'object', description: 'User context and preferences', required: false },
-          ],
-          outputs: [
-            { name: 'prioritized-tasks', type: 'task', description: 'Tasks ordered by priority' },
-            { name: 'recommendations', type: 'insight', description: 'Prioritization reasoning' },
-          ],
-          pricing: { model: 'paypercall', price: 0.1, currency: 'USD' },
-          requirements: { minMemory: '256MB', minCpu: '2 cores' },
-          security: { sandbox: true, isolationLevel: 'high', auditLogging: true, dataHandling: 'user_only' },
-          stats: { usageCount: 600, successRate: 0.91, avgExecutionTime: 3.2, uptime: 0.95 },
-          author: { name: 'SmartPriority', email: 'hello@smartpriority.ai', verified: true },
-          rating: 4.8,
-          installs: 600,
-          health: 92,
-          lastUpdated: '2024-01-05',
-          isVerified: true,
-          isFeatured: true,
-        },
-      ];
-
-      setAgents(mockAgents);
+      const data = await agentService.getAgents({
+        category: selectedCategory,
+        search: searchQuery,
+        featuredOnly: false,
+        minRating: 0
+      });
+      setAgents(data);
     } catch (error) {
       console.error('Failed to fetch agents:', error);
+      // Fallback to mock data for development
+      setAgents(getMockAgents());
     } finally {
       setLoading(false);
     }
@@ -363,15 +231,17 @@ export function AgentRegistry() {
 
   const installAgent = async (agent: AgentManifest) => {
     try {
-      // Simulate installation
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const success = await agentService.installAgent(agent.id);
+      if (success) {
+        const updatedInstalled = [...installedAgents, agent.id];
+        setInstalledAgents(updatedInstalled);
+        localStorage.setItem('installed-agents', JSON.stringify(updatedInstalled));
 
-      const updatedInstalled = [...installedAgents, agent.id];
-      setInstalledAgents(updatedInstalled);
-      localStorage.setItem('installed-agents', JSON.stringify(updatedInstalled));
+        // Refresh agent list to update install count
+        await fetchAgents();
 
-      // Show success message
-      console.log(`Installed agent: ${agent.name}`);
+        console.log(`Installed agent: ${agent.name}`);
+      }
     } catch (error) {
       console.error('Failed to install agent:', error);
     }
@@ -379,11 +249,17 @@ export function AgentRegistry() {
 
   const uninstallAgent = async (agentId: string) => {
     try {
-      const updatedInstalled = installedAgents.filter((id) => id !== agentId);
-      setInstalledAgents(updatedInstalled);
-      localStorage.setItem('installed-agents', JSON.stringify(updatedInstalled));
+      const success = await agentService.uninstallAgent(agentId);
+      if (success) {
+        const updatedInstalled = installedAgents.filter((id) => id !== agentId);
+        setInstalledAgents(updatedInstalled);
+        localStorage.setItem('installed-agents', JSON.stringify(updatedInstalled));
 
-      console.log(`Uninstalled agent: ${agentId}`);
+        // Refresh agent list to update install count
+        await fetchAgents();
+
+        console.log(`Uninstalled agent: ${agentId}`);
+      }
     } catch (error) {
       console.error('Failed to uninstall agent:', error);
     }
@@ -392,7 +268,8 @@ export function AgentRegistry() {
   const getCategoryIcon = (category: string) => {
     const cat = AGENT_CATEGORIES.find((c) => c.value === category);
     return cat?.icon || Bot;
-  };n
+  };
+
   const getSecurityColor = (level: string) => {
     switch (level) {
       case 'high': return 'bg-green-100 text-green-800';
@@ -426,7 +303,7 @@ export function AgentRegistry() {
         </div>
 
         <div className="md:w-48">
-          <Select value={selectedCategory || ''} onValueChange={(value) => setSelectedCategory(value || null)}>
+          <Select value={selectedCategory || ''} onValueChange={(value) => setSelectedCategory(value === '' ? undefined : value)}>
             <SelectTrigger>
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -445,7 +322,7 @@ export function AgentRegistry() {
         </div>
 
         <div className="md:w-48">
-          <Select value={selectedSecurity || ''} onValueChange={(value) => setSelectedSecurity(value || null)}>
+          <Select value={selectedSecurity || ''} onValueChange={(value) => setSelectedSecurity(value === '' ? undefined : value)}>
             <SelectTrigger>
               <SelectValue placeholder="Security Level" />
             </SelectTrigger>
@@ -620,6 +497,23 @@ export function AgentRegistry() {
                       Install
                     </Button>
                   )}
+
+                  {installedAgents.includes(agent.id) && (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => setExecutionAgent(agent)}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Execute
+                        </Button>
+                      </DialogTrigger>
+                      <AgentExecutionDialog agent={executionAgent} onClose={() => setExecutionAgent(null)} />
+                    </Dialog>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -782,14 +676,391 @@ function AgentDetailsDialog({ agent, onClose }: { agent: AgentManifest | null; o
   );
 }
 
-// Helper function
-function getSecurityColor(level: string): string {
-  switch (level) {
-    case 'high': return 'bg-green-100 text-green-800 border-green-300';
-    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    case 'low': return 'bg-gray-100 text-gray-800 border-gray-300';
-    default: return 'bg-gray-100 text-gray-800 border-gray-300';
-  }
+// Agent execution dialog for testing agents in a sandbox
+function AgentExecutionDialog({ agent, onClose }: { agent: AgentManifest | null; onClose: () => void }) {
+  if (!agent) return null;
+
+  const [input, setInput] = useState<any>(null);
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleExecute = async () => {
+    if (!input) {
+      setError('Please provide input data');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // In a real app, you would get the API key from secure storage or auth context
+      // For demo, we'll use a placeholder
+      const apiKey = 'demo-api-key';
+
+      const response = await agentService.executeAgent(agent.id, input, apiKey);
+      setResult(response.result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to execute agent');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-3">
+          <Bot className="h-6 w-6 text-primary" />
+          Execute {agent.name}
+          <Badge variant="secondary">Sandbox</Badge>
+        </DialogTitle>
+      </DialogHeader>
+
+      <div className="space-y-6">
+        {/* Input Form */}
+        <div>
+          <h4 className="font-semibold mb-2">Input Data</h4>
+          <p className="text-sm text-muted-foreground">
+            Provide input data for the agent to process. Format depends on the agent's requirements.
+          </p>
+
+          {agent.inputs?.map((inputDef) => (
+            <div key={inputDef.name} className="mb-4">
+              <label className="block text-sm font-medium mb-1">
+                {inputDef.name} {inputDef.required && (
+                  <span className="text-red-500">*</span>
+                )}
+              </label>
+              <p className="text-xs text-muted-foreground mb-1">{inputDef.description}</p>
+              <div className="flex flex-col gap-2">
+                {inputDef.type === 'string' && (
+                  <textarea
+                    value={input?.[inputDef.name] || ''}
+                    onChange={(e) => setInput((prev: any) => ({ ...prev, [inputDef.name]: e.target.value }))}
+                    placeholder="Enter text..."
+                    className="p-2 border rounded w-full h-20"
+                    rows={3}
+                  />
+                )}
+                {inputDef.type === 'number' && (
+                  <input
+                    type="number"
+                    value={input?.[inputDef.name] || ''}
+                    onChange={(e) => setInput((prev: any) => ({ ...prev, [inputDef.name]: e.target.value ? parseFloat(e.target.value) : '' }))}
+                    placeholder="Enter number"
+                    className="p-2 border rounded w-full"
+                  />
+                )}
+                {inputDef.type === 'boolean' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={input?.[inputDef.name] || false}
+                      onChange={(e) => setInput((prev: any) => ({ ...prev, [inputDef.name]: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    <span>Yes/No</span>
+                  </div>
+                )}
+                {inputDef.type === 'array' && (
+                  <div>
+                    <input
+                      type="text"
+                      value={Array.isArray(input?.[inputDef.name]) ? input?.[inputDef.name].join(', ') : ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const array = value.split(',').map((item: string) => item.trim()).filter(Boolean);
+                        setInput((prev: any) => ({ ...prev, [inputDef.name]: array }));
+                      }}
+                      placeholder="Enter comma-separated values"
+                      className="p-2 border rounded w-full"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Format: item1, item2, item3
+                    </p>
+                  </div>
+                )}
+                {inputDef.type === 'object' && (
+                  <div>
+                    <input
+                      type="text"
+                      value={typeof input?.[inputDef.name] === 'object' && input?.[inputDef.name] !== null
+                        ? JSON.stringify(input?.[inputDef.name], null, 2)
+                        : ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        try {
+                          const parsed = value ? JSON.parse(value) : {};
+                          setInput((prev: any) => ({ ...prev, [inputDef.name]: parsed }));
+                        } catch (err) {
+                          // Invalid JSON, keep current value
+                        }
+                      }}
+                      placeholder='{"key": "value"}'
+                      className="p-2 border rounded w-full font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Format: JSON object
+                    </p>
+                  </div>
+                )}
+                {inputDef.type === 'file' && (
+                  <div>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setInput((prev: any) => ({ ...prev, [inputDef.name]: reader.result }));
+                          };
+                          reader.readAsText(file);
+                        }
+                      }}
+                      className="p-2 border rounded"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Select a file to upload
+                    </p>
+                  </div>
+                )}
+                {/* Default fallback for other types */}
+                {!['string', 'number', 'boolean', 'array', 'object', 'file'].includes(inputDef.type) && (
+                  <input
+                    type="text"
+                    value={input?.[inputDef.name] || ''}
+                    onChange={(e) => setInput((prev: any) => ({ ...prev, [inputDef.name]: e.target.value }))}
+                    placeholder="Enter value"
+                    className="p-2 border rounded w-full"
+                  />
+                )}
+              {inputDef.validation && (
+                <div className="text-xs text-red-500 mt-1">
+                  {/* Validation logic would go here */}
+                  Validation rules apply
+                </div>
+              )}
+            </div>
+            </div>
+          ))}
+
+          {/* Default input if none defined */}
+          {!agent.inputs || agent.inputs.length === 0 && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">
+                Custom Input (JSON)
+              </label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Enter JSON input data for the agent
+              </p>
+              <textarea
+                value={typeof input === 'object' && input !== null ? JSON.stringify(input, null, 2) : ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  try {
+                    const parsed = value ? JSON.parse(value) : null;
+                    setInput(parsed);
+                  } catch (err) {
+                    setError('Invalid JSON format');
+                  }
+                }}
+                placeholder='{"key": "value"}'
+                className="p-2 border rounded w-full h-24 font-mono"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleExecute}
+            disabled={loading}
+            className="flex-1"
+          >
+            {loading ? 'Executing...' : 'Execute Agent'}
+            {!loading && (
+              <Play className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded">
+            <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Result Display */}
+        {result && (
+          <div>
+            <h4 className="font-semibold mb-2">Execution Result</h4>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span className="font-medium">Status: {result.status}</span>
+              </div>
+
+              {result.executionTime !== undefined && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-blue-500" />
+                  <span className="font-medium">Execution Time: {result.executionTime}s</span>
+                </div>
+              )}
+
+              {typeof result.output === 'object' && result.output !== null && (
+                <div>
+                  <h5 className="font-medium mb-2">Output Data:</h5>
+                  <pre className="p-3 bg-muted rounded overflow-auto max-h-48">
+                    <code className="text-xs font-mono">{JSON.stringify(result.output, null, 2)}</code>
+                  </pre>
+                </div>
+              )}
+
+              {typeof result.output === 'string' && (
+                <div>
+                  <h5 className="font-medium mb-2">Output:</h5>
+                  <p className="text-sm text-muted-foreground">{result.output}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end mt-4">
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    </DialogContent>
+  );
+}
+
+// Mock data for development fallback
+function getMockAgents(): AgentManifest[] {
+  return [
+    {
+      id: 'email-summarizer',
+      name: 'Email Summarizer',
+      description: 'Analyzes emails and extracts actionable tasks',
+      version: '1.2.0',
+      category: 'productivity',
+      tags: ['email', 'summarization', 'tasks', 'automation'],
+      capabilities: ['parse-text', 'extract-tasks', 'priority-suggest', 'validate-input', 'sanitize-output'],
+      inputs: [
+        { name: 'emails', type: 'array', description: 'List of email contents', required: true },
+        { name: 'timeframe', type: 'string', description: 'Analysis period', required: false, default: 'today' },
+      ],
+      outputs: [
+        { name: 'tasks', type: 'task', description: 'Extracted tasks' },
+        { name: 'summary', type: 'data', description: 'Summary statistics' },
+      ],
+      pricing: { model: 'freemium', limits: { requests: 100, 'max-emails': 50 } },
+      requirements: { minMemory: '256MB', minCpu: '1 core' },
+      security: { sandbox: true, isolationLevel: 'medium', auditLogging: true, dataHandling: 'user_only' },
+      stats: { usageCount: 1250, successRate: 0.94, avgExecutionTime: 2.3, uptime: 0.98 },
+      author: { name: 'Todo Phoenix Labs', email: 'labs@todophoenix.ai', verified: true },
+      rating: 4.7,
+      installs: 1250,
+      health: 98,
+      lastUpdated: '2024-01-15',
+      isVerified: true,
+      isFeatured: true,
+    },
+    {
+      id: 'meeting-scheduler',
+      name: 'Meeting Scheduler',
+      description: 'Automatically schedules meetings based on calendar availability',
+      version: '0.9.1',
+      category: 'automation',
+      tags: ['calendar', 'scheduling', 'meetings', 'availability'],
+      capabilities: ['check-availability', 'find-slots', 'send-invitations'],
+      inputs: [
+        { name: 'attendees', type: 'array', description: 'List of attendees', required: true },
+        { name: 'preferences', type: 'object', description: 'Scheduling preferences', required: false },
+      ],
+      outputs: [
+        { name: 'meetings', type: 'task', description: 'Proposed meeting slots' },
+        { name: 'invitation', type: 'notification', description: 'Calendar invitation' },
+      ],
+      pricing: { model: 'subscription', price: 9.99, currency: 'USD', interval: 'month', limits: { 'max-attendees': 20 } },
+      requirements: { minMemory: '512MB', minCpu: '2 cores' },
+      security: { sandbox: true, isolationLevel: 'high', auditLogging: true, dataHandling: 'user_only' },
+      stats: { usageCount: 850, successRate: 0.89, avgExecutionTime: 5.1, uptime: 0.96 },
+      author: { name: 'CalendarPro', email: 'contact@calendarpro.com', verified: true },
+      rating: 4.5,
+      installs: 850,
+      health: 94,
+      lastUpdated: '2024-01-10',
+      isVerified: true,
+      isFeatured: false,
+    },
+    {
+      id: 'time-tracker',
+      name: 'Intelligent Time Tracker',
+      description: 'Tracks time spent on tasks with AI-powered categorization',
+      version: '2.1.0',
+      category: 'productivity',
+      tags: ['time-tracking', 'analytics', 'categorization', 'productivity'],
+      capabilities: ['track-time', 'categorize-activities', 'generate-reports'],
+      inputs: [
+        { name: 'activities', type: 'array', description: 'List of activities', required: true },
+        { name: 'project', type: 'string', description: 'Project context', required: false },
+      ],
+      outputs: [
+        { name: 'time-data', type: 'data', description: 'Processed time entries' },
+        { name: 'insights', type: 'insight', description: 'Productivity insights' },
+      ],
+      pricing: { model: 'free' },
+      requirements: { minMemory: '128MB', minCpu: '1 core' },
+      security: { sandbox: false, isolationLevel: 'low', auditLogging: true, dataHandling: 'user_only' },
+      stats: { usageCount: 2100, successRate: 0.92, avgExecutionTime: 1.8, uptime: 0.99 },
+      author: { name: 'TimeFlow', email: 'support@timeflow.app', verified: false },
+      rating: 4.3,
+      installs: 2100,
+      health: 99,
+      lastUpdated: '2024-01-20',
+      isVerified: false,
+      isFeatured: true,
+    },
+    {
+      id: 'task-prioritorizer',
+      name: 'Task Prioritizer',
+      description: 'AI-powered task prioritization based on deadlines, dependencies, and importance',
+      version: '1.5.0',
+      category: 'ai',
+      tags: ['prioritization', 'ai', 'dependencies', 'urgency'],
+      capabilities: ['analyze-tasks', 'calculate-priority', 'suggest-order'],
+      inputs: [
+        { name: 'tasks', type: 'array', description: 'List of tasks to prioritize', required: true },
+        { name: 'context', type: 'object', description: 'User context and preferences', required: false },
+      ],
+      outputs: [
+        { name: 'prioritized-tasks', type: 'task', description: 'Tasks ordered by priority' },
+        { name: 'recommendations', type: 'insight', description: 'Prioritization reasoning' },
+      ],
+      pricing: { model: 'paypercall', price: 0.1, currency: 'USD' },
+      requirements: { minMemory: '256MB', minCpu: '2 cores' },
+      security: { sandbox: true, isolationLevel: 'high', auditLogging: true, dataHandling: 'user_only' },
+      stats: { usageCount: 600, successRate: 0.91, avgExecutionTime: 3.2, uptime: 0.95 },
+      author: { name: 'SmartPriority', email: 'hello@smartpriority.ai', verified: true },
+      rating: 4.8,
+      installs: 600,
+      health: 92,
+      lastUpdated: '2024-01-05',
+      isVerified: true,
+      isFeatured: true,
+    },
+  ];
 }
 
 export default AgentRegistry;
