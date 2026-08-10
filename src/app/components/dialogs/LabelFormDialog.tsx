@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ColorPicker } from "@/components/ui/color-picker";
 import { Loader2, Tag as TagIcon } from "lucide-react";
 
 interface LabelFormDialogProps {
@@ -168,9 +167,11 @@ export function LabelFormDialog({
             {/* Color Picker */}
             <div>
               <Label>Color</Label>
-              <ColorPicker
+              <input
+                type="color"
                 value={formData.color}
-                onChange={handleColorChange}
+                onChange={(e) => handleColorChange(e.target.value)}
+                className="w-12 h-12 p-1 border border-input rounded"
               />
             </div>
           </div>
