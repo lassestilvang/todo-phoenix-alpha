@@ -63,20 +63,19 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({
           // Combine registry and agentOS data
           const combined = Array.from(agents.values()).map((agent) => {
             const context = contexts.get(agent.id);
-            const osAgent = agentOS.getAgent(agent.id);
 
             return {
               id: agent.id,
               name: agent.name,
-              capabilities: agent.capabilities,
-              workField: agent.workField,
+              capabilities: Object.keys(agent.capabilities),
+              workField: context?.workField || 'creative',
               currentPhase: context?.currentPhase || 'idle',
               focusLevel: context?.focusLevel || 100,
               energyLevel: context?.energyLevel || 100,
               currentTaskId: context?.currentTaskId,
               status: getAgentStatus(context?.lastHeartbeat || Date.now()),
               totalTasksCompleted: agent.totalTasksCompleted || 0,
-              availableSince: agent.availableSince || Date.now(),
+              availableSince: context?.availableSince || Date.now(),
               lastHeartbeat: context?.lastHeartbeat || Date.now(),
             };
           });
@@ -103,7 +102,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data) as BackchannelMessage;
 
-      if (message.type === 'STATUS_UPDATE') {
+      if (message.type === 'STATUS_BROADCAST') {
         // Update agent status based on real-time update
         setAgentStatuses((prev) => prev.map((agent) => {
           if (agent.id === message.payload.agentId) {
