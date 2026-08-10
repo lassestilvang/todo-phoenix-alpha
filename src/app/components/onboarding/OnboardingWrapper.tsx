@@ -143,7 +143,7 @@ export function OnboardingWrapper() {
                       )}
                       <button
                         onClick={nextStep}
-                        disabled={!isValid && currentStep.validation}
+                        disabled={!isValid}
                         className="px-4 py-2 bg-primary text-primary-foreground rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90"
                       >
                         {currentStep.id === 'complete' ? 'Finish' : 'Next'}
