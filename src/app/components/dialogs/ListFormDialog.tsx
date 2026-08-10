@@ -1,4 +1,4 @@
-"use client';
+"use client";
 
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -6,9 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ColorPicker } from '@/components/ui/color-picker';
-import { EmojiPicker } from '@/components/ui/emoji-picker';
 import { Loader2, Plus } from 'lucide-react';
+
+const COMMON_EMOJIS = [
+  '📋', '📝', '✅', '📌', '🏷️', '🔖', '📚', '📁',
+  '📂', '🗂️', '🗃️', '🗄️', '📦', '🗑️', '🔒', '🔓',
+  '⭐', '🌟', '💫', '✨', '🎯', '🏆', '🏷️', '📍'
+];
 
 interface ListFormDialogProps {
   open: boolean;
@@ -129,10 +133,20 @@ export function ListFormDialog({
           <div>
             <Label>Emoji</Label>
             <div className="flex items-center space-x-2">
-              <EmojiPicker
-                value={formData.emoji}
-                onChange={handleEmojiChange}
-              />
+              <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                {COMMON_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleEmojiChange(emoji)}
+                    className={`text-xl transition-transform hover:scale-110 ${
+                      formData.emoji === emoji ? 'ring-2 ring-primary' : ''
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               <span className="text-2xl ml-2">{formData.emoji}</span>
             </div>
           </div>
@@ -140,10 +154,19 @@ export function ListFormDialog({
           {/* Color */}
           <div>
             <Label>Color</Label>
-            <ColorPicker
-              value={formData.color}
-              onChange={handleColorChange}
-            />
+            <div className="flex items-center space-x-2">
+              <input
+                type="color"
+                value={formData.color}
+                onChange={(e) => handleColorChange(e.target.value)}
+                className="w-12 h-10 p-1 border border-input rounded cursor-pointer"
+              />
+              <Input
+                value={formData.color}
+                onChange={(e) => handleColorChange(e.target.value)}
+                className="w-24"
+              />
+            </div>
           </div>
 
           {/* Icon */}
