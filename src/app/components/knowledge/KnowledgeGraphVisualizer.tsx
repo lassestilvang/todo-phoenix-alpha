@@ -22,7 +22,8 @@ import {
   RefreshCw,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  AlertCircle
 } from 'lucide-react';
 import {
   Select,
@@ -243,7 +244,7 @@ export function KnowledgeGraphVisualizer({ tasks, labels, projects }: KnowledgeG
 
   // Generate insights from task data
   const generateInsightsFromTasks = (tasks: any[]): KnowledgeGraphInsight[] => {
-    const insights: KnowledgeGraphInsightInsight[] = [];
+    const insights: KnowledgeGraphInsight[] = [];
     const now = new Date();
 
     // Pattern: Frequent task creation
