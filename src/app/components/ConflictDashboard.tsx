@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useConflictArbiter } from '@/lib/conflict-arbiter';
 import { ConflictEvent } from '@/lib/conflict-arbiter';
 
 export interface ConflictSummary {
