@@ -134,7 +134,7 @@ export default function DependencyGraph({
     return () => cancelAnimationFrame(animationFrame);
   }, [nodes, edges, width, height]);
 
-  const handleMouseDown = (e: React.MouseEvent<SVGCircleElement>, nodeId: number) => {
+  const handleMouseDown = (e: React.MouseEvent<SVGGElement>, nodeId: number) => {
     e.stopPropagation();
     setIsDragging(nodeId);
     dragStartRef.current = { x: e.clientX, y: e.clientY };
