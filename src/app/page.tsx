@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
@@ -8,13 +10,13 @@ import {
   getTasksByDateRange, getUpcomingTasks, getOverdueTasks,
   getLabels, createTask, toggleTaskComplete, deleteTask,
   updateTask, createList, createLabel, getTaskById,
-  getPendingReminders
+  getPendingReminders, markReminderSent
 } from "@/app/actions/tasks"
 import type { Task, List, Label, TaskWithDetails, TaskFormData, RecurringPattern } from "@/lib/types"
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { useKeyboardShortcuts } from "@/lib/hooks/use-keyboard-shortcuts"
-import { OnboardingWrapper } from "@/components/onboarding/OnboardingWrapper"
+import { OnboardingWrapper } from "@/app/components/onboarding/OnboardingWrapper"
 
 export default function DashboardPage() {
   const searchParams = useSearchParams()
@@ -53,7 +55,7 @@ export default function DashboardPage() {
         // Get all tasks and filter by label
         tasksData = await getTasks(showCompleted)
         const parsedLabelId = parseInt(labelId)
-        tasksData = tasksData.filter((task) => {
+        tasksData = tasksData.filter((task: any) => {
           if (!task.labels) return false
           // Check both label object and label ID
           if (typeof task.labels[0] === 'object') {
@@ -119,8 +121,10 @@ export default function DashboardPage() {
       try {
         const pending = await getPendingReminders()
         for (const reminder of pending) {
-          if (!reminder.notified) {
-            toast.warning(`Reminder: ${reminder.task?.name || 'Task'}`, {
+          if (reminder.is_sent === 0) {
+            // Get task information for the reminder
+            const task = await getTaskById(reminder.task_id);
+            toast.warning(`Reminder: ${task?.name || 'Task'}`, {
               description: `Due at ${new Date(reminder.time).toLocaleTimeString()}`,
               action: {
                 label: "View",
@@ -129,8 +133,8 @@ export default function DashboardPage() {
                 }
               }
             })
-            // Mark as notified to avoid duplicate toasts
-            reminder.notified = true
+            // Mark as sent to avoid duplicate reminders
+            await markReminderSent(reminder.id);
           }
         }
       } catch (error) {
@@ -143,13 +147,16 @@ export default function DashboardPage() {
   }, [])
 
   // Register global keyboard shortcuts
-  useKeyboardShortcuts(
-    {
-      "ctrl+n": handleNewTask,
-      "escape": handleEscape,
-    },
-    { enabled: true, preventDefault: true }
-  )
+  const handleCreateTask = () => {
+    setEditingTaskId(null)
+    setIsTaskFormOpen(true)
+  }
+
+  const handleEscape = () => {
+    setIsTaskFormOpen(false)
+    setEditingTaskId(null)
+    setSelectedTaskDetails(null)
+  }
 
   const handleToggleComplete = async (taskId: number) => {
     await toggleTaskComplete(taskId)
@@ -168,10 +175,13 @@ export default function DashboardPage() {
     setIsTaskFormOpen(true)
   }
 
-  const handleCreateTask = () => {
-    setEditingTaskId(null)
-    setIsTaskFormOpen(true)
-  }
+  useKeyboardShortcuts(
+    {
+      "ctrl+n": handleCreateTask,
+      "escape": handleEscape,
+    },
+    { enabled: true, preventDefault: true }
+  )
 
   const handleSaveTask = async (data: TaskFormData) => {
     if (editingTaskId) {
