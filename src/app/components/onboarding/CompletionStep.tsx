@@ -1,6 +1,7 @@
 'use client';
 
-import { useOnboarding, useRouter } from '@/lib/onboarding/useOnboarding';
+import { useOnboarding } from '@/lib/onboarding/useOnboarding';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export function CompletionStep() {
