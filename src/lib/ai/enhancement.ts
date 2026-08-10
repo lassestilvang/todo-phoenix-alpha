@@ -1,452 +1,256 @@
+import { Anthropic } from '@anthropic-ai/sdk';
+
+// Initialize Claude API client
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
 /**
- * AI Enhancement Module
- * Provides predictive prioritization, natural language parsing, and context-aware suggestions
+ * Generate AI suggestions for task optimization
+ * Uses task types from the project
  */
-
-import { Task } from '@/types/task';
-import { ConflictArbiter } from '@/lib/conflict-arbiter';
-import { useRBAC } from '@/lib/security/rbac';
-import { versionControl } from '@/lib/conflict-resolution/version-control';
-import { encryptionService } from '@/lib/security/encryption';
-
-export type PriorityLevel = 'high' | 'medium' | 'low' | 'none';
-export type TimeEstimate = number; // minutes
-
-export interface SuggestedSchedule {
-  startDate: Date;
-  optimalStartTime: string;
+export async function generateTaskSuggestions(
+  task: any
+): Promise<{
+  priority: 'high' | 'medium' | 'low' | 'none';
+  suggestedTimeEstimate: number;
+  suggestedDate: string | null;
+  relatedTasks: number[];
   confidence: number;
-}
+  predictiveSchedule?: {
+    startDate: Date;
+    optimalStartTime: string;
+    confidence: number;
+  };
+}> {
+  const prompt = `
+  Given this task: ${JSON.stringify(task)}
 
-export interface TaskSuggestion {
-  priority: PriorityLevel;
-  suggestedTimeEstimate: TimeEstimate;
-  relatedTasks: string[];
-  confidence: number;
-  predictiveSchedule?: SuggestedSchedule;
-}
+  Please provide AI suggestions for:
+  1. Optimal priority level (high/medium/low/none)
+  2. Better time estimate in minutes
+  3. Suggested date (if not provided)
+  4. Related tasks (list of IDs)
+  5. Confidence score (0-100)
 
-export interface TaskFormData {
-  name: string;
-  description?: string;
-  date?: string;
-  deadline?: string;
-  estimate_minutes?: number;
-  priority?: PriorityLevel;
-  is_recurring?: boolean;
-  recurring_pattern?: string;
-  recurring_custom_value?: string;
-}
+  Consider the task's deadline, estimate, existing tasks with similar properties,
+  and scheduling patterns to provide the best recommendations.
 
-/**
- * Predictive Prioritization Engine
- * Analyzes tasks and suggests optimal priority based on multiple factors
- */
-export class PredictivePrioritization {
-  private static readonly DEADLINE_WEIGHT = 0.4;
-  private static readonly DEPENDENCY_WEIGHT = 0.3;
-  private static readonly RECENCY_WEIGHT = 0.2;
-  private static readonly COMPLEXITY_WEIGHT = 0.1;
-
-  /**
-   * Predict optimal priority for a task
-   */
-  static predictPriority(task: Task, allTasks: Task[]): PriorityLevel {
-    let score = 0;
-
-    // Factor 1: Deadline proximity
-    if (task.deadline) {
-      const daysUntilDeadline = this.daysUntil(task.deadline);
-      if (daysUntilDeadline <= 1) score += 30;
-      else if (daysUntilDeadline <= 3) score += 20;
-      else if (daysUntilDeadline <= 7) score += 10;
-    }
-
-    // Factor 2: Dependency count
-    const dependentCount = allTasks.filter(t => t.dependencies?.includes(task.id ?? '')).length;
-    score += dependentCount * 5;
-
-    // Factor 3: Recency (newer tasks get higher priority)
-    const daysSinceCreation = this.daysSince(task.created_at);
-    if (daysSinceCreation <= 1) score += 15;
-    else if (daysSinceCreation <= 3) score += 10;
-    else if (daysSinceCreation <= 7) score += 5;
-
-    // Factor 4: Dependency complexity
-    if (task.dependencies && task.dependencies.length > 0) {
-      score += task.dependencies.length * 3;
-    }
-
-    // Determine priority level
-    if (score >= 50) return 'high';
-    if (score >= 30) return 'medium';
-    if (score > 0) return 'low';
-    return 'none';
+  Respond with JSON in this format:
+  {
+    "priority": "high|medium|low|none",
+    "suggestedTimeEstimate": 60,
+    "suggestedDate": "2024-01-15",
+    "relatedTasks": [1, 3, 5],
+    "confidence": 85
   }
+  `;
 
-  /**
-   * Calculate days between two dates
-   */
-  private static daysUntil(date: string): number {
-    const target = new Date(date).setHours(0, 0, 0, 0);
-    const now = new Date().setHours(0, 0, 0, 0);
-    return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
-  }
-
-  private static daysSince(createdAt: string): number {
-    const created = new Date(createdAt).setHours(0, 0, 0, 0);
-    const now = new Date().setHours(0, 0, 0, 0);
-    return Math.ceil((now - created) / (1000 * 60 * 60 * 24));
-  }
-}
-
-/**
- * Natural Language Task Parser
- * Parses user input into structured task data
- */
-export class NaturalLanguageParser {
-  /**
-   * Parse a task description into structured form data
-   */
-  static parse(description: string): Partial<TaskFormData> {
-    const result: Partial<TaskFormData> = {
-      name: '',
-      description: description,
-      date: null,
-      deadline: null,
-      estimate_minutes: null,
-      priority: 'medium',
-      is_recurring: false,
-      recurring_pattern: null,
-      recurring_custom_value: null,
-    };
-
-    // Extract task name (first sentence or up to first period)
-    const nameMatch = description.match(/^[^.!?]+/);
-    if (nameMatch) {
-      result.name = nameMatch[0].trim();
-    }
-
-    // Extract deadline patterns
-    const deadlinePatterns = [
-      /due\s+(?:on|by)?\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s+\d{4})?)/i,
-      /by\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s+\d{4})?)/i,
-      /deadline\s*[=:]\s*([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s+\d{4})?)/i
-    ];
-
-    for (const pattern of deadlinePatterns) {
-      const match = description.match(pattern);
-      if (match) {
-        const parsedDate = this.parseDate(match[1]);
-        if (parsedDate) {
-          result.deadline = parsedDate;
-          break;
-        }
-      }
-    }
-
-    // Extract date patterns
-    const datePatterns = [
-      /due\s+(?:on)?\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s+\d{4})?)/i,
-      /schedule[d]?\s+(?:for)?\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s+\d{4})?)/i
-    ];
-
-    for (const pattern of datePatterns) {
-      const match = description.match(pattern);
-      if (match) {
-        const parsedDate = this.parseDate(match[1]);
-        if (parsedDate) {
-          result.date = parsedDate;
-          break;
-        }
-      }
-    }
-
-    // Extract time estimate patterns
-    const timeEstimatePatterns = [
-      /(\d+)\s*(?:hour|hours|hr)/i,
-      /(\d+)\s*(?:minute|minutes|min)/i
-    ];
-
-    for (const pattern of timeEstimatePatterns) {
-      const match = description.match(pattern);
-      if (match) {
-        const value = parseInt(match[1], 10);
-        if (pattern.includes('hour')) {
-          result.estimate_minutes = value * 60;
-        } else {
-          result.estimate_minutes = value;
-        }
-        break;
-      }
-    }
-
-    // Detect recurring patterns
-    const recurringPatterns = description.toLowerCase();
-    if (recurringPatterns.includes('daily') || recurringPatterns.includes('every day')) {
-      result.is_recurring = true;
-      result.recurring_pattern = 'every_day';
-    } else if (recurringPatterns.includes('weekly') || recurringPatterns.includes('every week')) {
-      result.is_recurring = true;
-      result.recurring_pattern = 'every_week';
-    } else if (recurringPatterns.includes('monthly') || recurringPatterns.includes('every month')) {
-      result.is_recurring = true;
-      result.recurring_pattern = 'every_month';
-    }
-
-    return result;
-  }
-
-  /**
-   * Parse human-readable date strings
-   */
-  private static parseDate(dateStr: string): string | null {
-    // Handle relative dates
-    const lower = dateStr.toLowerCase();
-
-    if (lower.includes('today')) return new Date().toISOString().split('T')[0];
-    if (lower.includes('tomorrow')) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
-    }
-    if (lower.includes('this week')) {
-      const endOfWeek = new Date();
-      endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
-      return endOfWeek.toISOString().split('T')[0];
-    }
-    if (lower.includes('next week')) {
-      const nextWeek = new Date();
-      nextWeek.setDate(nextWeek.getDate() + 7);
-      return nextWeek.toISOString().split('T')[0];
-    }
-
-    // Try to parse as "Month Day, Year"
-    const dateRegex = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s*(\d{4})?/i;
-    const match = dateStr.match(dateRegex);
-    if (match) {
-      const monthNames: Record<string, number> = {
-        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-      };
-      const month = monthNames[match[1].toLowerCase()];
-      const day = parseInt(match[2], 10);
-      const year = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
-
-      try {
-        const date = new Date(year, month, day);
-        return date.toISOString().split('T')[0];
-      } catch {
-        return null;
-      }
-    }
-
-    // Try "Day Month Year" format
-    const altRegex = /(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})?/i;
-    const altMatch = dateStr.match(altRegex);
-    if (altMatch) {
-      const monthNames: Record<string, number> = {
-        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
-      };
-      const month = monthNames[altMatch[2].toLowerCase()];
-      const day = parseInt(altMatch[1], 10);
-      const year = altMatch[3] ? parseInt(altMatch[3], 10) : new Date().getFullYear();
-
-      try {
-        const date = new Date(year, month, day);
-        return date.toISOString().split('T')[0];
-      } catch {
-        return null;
-      }
-    }
-
-    return null;
-  }
-}
-
-/**
- * Context-Aware Task Suggestions
- * Provides suggestions based on task history and context
- */
-export class ContextAwareSuggestions {
-  private static readonly HIGH_CONFIDENCE_THRESHOLD = 80;
-  private static readonly MEDIUM_CONFIDENCE_THRESHOLD = 60;
-
-  /**
-   * Generate task suggestions based on similar completed tasks
-   */
-  static generateSuggestions(
-    task: Task,
-    completedTasks: Task[],
-    currentContext: 'morning' | 'afternoon' | 'evening' | 'any' = 'any'
-  ): TaskSuggestion {
-    const priority = PredictivePrioritization.predictPriority(task, completedTasks);
-    const confidence = this.calculateConfidence(task, completedTasks);
-
-    // Estimate time based on similar tasks
-    const similarTasks = completedTasks.filter(t =>
-      t.priority === task.priority &&
-      this.isSimilarComplexity(task, t)
-    );
-
-    let suggestedTimeEstimate = 30; // default
-    if (similarTasks.length > 0) {
-      const avgTime = similarTasks.reduce((sum, t) => sum + (t.estimate_minutes || 0), 0) / similarTasks.length;
-      suggestedTimeEstimate = Math.round(avgTime);
-    }
-
-    // Generate related tasks based on dependencies and tags
-    const relatedTasks = this.findRelatedTasks(task, completedTasks);
-
-    // Predict schedule if confidence is high enough
-    let predictiveSchedule: SuggestedSchedule | undefined;
-    if (confidence >= this.HIGH_CONFIDENCE_THRESHOLD) {
-      predictiveSchedule = this.predictSchedule(task, currentContext);
-    }
-
-    return {
-      priority,
-      suggestedTimeEstimate,
-      relatedTasks,
-      confidence,
-      predictiveSchedule
-    };
-  }
-
-  /**
-   * Check if two tasks have similar complexity
-   */
-  private static isSimilarComplexity(task1: Task, task2: Task): boolean {
-    const complexityDiff = Math.abs(
-      (task1.estimate_minutes || 0) - (task2.estimate_minutes || 0)
-    );
-    return complexityDiff <= 30; // Within 30 minutes
-  }
-
-  /**
-   * Find related tasks based on various factors
-   */
-  private static findRelatedTasks(
-    task: Task,
-    allTasks: Task[]
-  ): string[] {
-    const related: string[] = [];
-
-    // Find tasks with shared dependencies
-    if (task.dependencies) {
-      allTasks.forEach(t => {
-        if (t.dependencies && t.dependencies.some((dep: string) => task.dependencies!.includes(dep))) {
-          if (!related.includes(t.id.toString())) related.push(t.id.toString());
-        }
-      });
-    }
-
-    // Find tasks with similar priority
-    allTasks.forEach(t => {
-      if (t.priority === task.priority && t.id !== task.id) {
-        if (!related.includes(t.id.toString())) related.push(t.id.toString());
-      }
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      temperature: 0.3,
+      system: 'You are an AI assistant specialized in task optimization and productivity suggestions.',
+      messages: [
+        {
+          type: 'user',
+          content: prompt,
+        },
+      ],
     });
 
-    return related.slice(0, 5); // Limit to 5 related tasks
-  }
+    const result = response.content[0]?.text;
+    if (!result) {
+      throw new Error('No response from Claude API');
+    }
 
-  /**
-   * Predict optimal start time and date
-   */
-  private static predictSchedule(
-    task: Task,
-    context: 'morning' | 'afternoon' | 'evening' | 'any'
-  ): SuggestedSchedule {
-    const now = new Date();
-    let startDate = new Date(now);
-    let optimalStartTime: string;
-    let confidence = 75; // base confidence
+    // Parse JSON from Claude's response
+    const jsonMatch = result.match(/\{.*\}/s);
+    if (!jsonMatch) {
+      throw new Error('Could not parse AI response');
+    }
 
-    // Adjust start date based on deadline
-    if (task.deadline) {
-      const deadline = new Date(task.deadline);
-      const daysUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    const suggestions = JSON.parse(jsonMatch[0]);
 
-      if (daysUntilDeadline <= 1) {
-        startDate = new Date(now);
-        optimalStartTime = '09:00';
-        confidence = 90;
-      } else if (daysUntilDeadline <= 3) {
-        startDate = new Date(now);
-        optimalStartTime = '09:00';
-        confidence = 80;
-      } else {
-        // Schedule for 2 days from now
-        startDate = new Date(now);
-        startDate.setDate(startDate.getDate() + 2);
-        optimalStartTime = '09:00';
-        confidence = 70;
-      }
-    } else {
-      // No deadline - schedule based on context
-      switch (context) {
-        case 'morning':
-          optimalStartTime = '09:00';
-          break;
-        case 'afternoon':
-          optimalStartTime = '14:00';
-          break;
-        case 'evening':
-          optimalStartTime = '18:00';
-          break;
-        default:
-          optimalStartTime = '09:00';
-      }
-      // Schedule for tomorrow
-      startDate = new Date(now);
-      startDate.setDate(startDate.getDate() + 1);
-      confidence = 65;
+    // Validate the suggestions
+    const validPriorities = ['high', 'medium', 'low', 'none'] as const;
+    if (!validPriorities.includes(suggestions.priority)) {
+      suggestions.priority = 'none';
+    }
+
+    if (suggestions.suggestedTimeEstimate < 0) {
+      suggestions.suggestedTimeEstimate = 30;
     }
 
     return {
-      startDate,
-      optimalStartTime,
-      confidence
+      ...suggestions,
+      relatedTasks: Array.isArray(suggestions.relatedTasks) ? suggestions.relatedTasks : [],
     };
-  }
 
-  /**
-   * Calculate overall confidence score
-   */
-  private static calculateConfidence(task: Task, completedTasks: Task[]): number {
-    let confidence = 50; // base confidence
-
-    // Increase confidence based on historical data
-    if (completedTasks.length > 0) {
-      confidence += Math.min(20, completedTasks.length * 2);
-    }
-
-    // Increase confidence if task has clear deadline
-    if (task.deadline) confidence += 10;
-
-    // Increase confidence if task has dependencies
-    if (task.dependencies && task.dependencies.length > 0) confidence += 5;
-
-    // Cap at 100
-    return Math.min(100, confidence);
+  } catch (error) {
+    console.error('Error generating AI suggestions:', error);
+    // Return fallback suggestions
+    return {
+      priority: 'medium',
+      suggestedTimeEstimate: task.estimate_minutes || 30,
+      suggestedDate: null,
+      relatedTasks: [],
+      confidence: 30,
+    };
   }
 }
 
 /**
- * Export convenient functions
+ * Generate insights about task patterns and behavior
  */
-export const enhancement = {
-  predictPriority: (task: Task, allTasks: Task[]): PriorityLevel =>
-    PredictivePrioritization.predictPriority(task, allTasks),
+export async function generateInsights(userData: {
+  tasks: any[];
+  completedTasks: number;
+  overdueTasks: number;
+  timeEntries: any[];
+}): Promise<{
+  mostProductiveTimeOfDay: number;
+  commonTaskDuration: number;
+  preferredPriorityDistribution: { high: number; medium: number; low: number; none: number };
+  taskCompletionRate: number;
+  peakFocusHours: number[];
+}> {
+  const prompt = `
+  Given user task and productivity data:
+  ${JSON.stringify(userData)}
 
-  parseTask: (description: string): Partial<TaskFormData> =>
-    NaturalLanguageParser.parse(description),
+  Provide insights on:
+  1. Most productive time of day (hour 0-23)
+  2. Common task duration in minutes
+  3. Preferred priority distribution
+  4. Task completion rate percentage
+  5. Peak focus hours (list of hours)
 
-  suggestTasks: (
-    task: Task,
-    completedTasks: Task[],
-    context?: 'morning' | 'afternoon' | 'evening' | 'any'
-  ): TaskSuggestion => ContextAwareSuggestions.generateSuggestions(task, completedTasks, context)
-};
+  Respond with JSON in this format:
+  {
+    "mostProductiveTimeOfDay": 14,
+    "commonTaskDuration": 45,
+    "preferredPriorityDistribution": { "high": 30, "medium": 40, "low": 20, "none": 10 },
+    "taskCompletionRate": 85,
+    "peakFocusHours": [9, 10, 14, 15]
+  }
+  `;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      temperature: 0.2,
+      system: 'You are an AI assistant specialized in analyzing productivity data and providing actionable insights.',
+      messages: [
+        {
+          type: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    const result = response.content[0]?.text;
+    if (!result) {
+      throw new Error('No response from Claude API');
+    }
+
+    // Parse JSON from Claude's response
+    const jsonMatch = result.match(/\{.*\}/s);
+    if (!jsonMatch) {
+      throw new Error('Could not parse AI response');
+    }
+
+    return JSON.parse(jsonMatch[0]);
+
+  } catch (error) {
+    console.error('Error generating insights:', error);
+    // Return fallback insights
+    return {
+      mostProductiveTimeOfDay: 14,
+      commonTaskDuration: 45,
+      preferredPriorityDistribution: { high: 30, medium: 40, low: 20, none: 10 },
+      taskCompletionRate: 85,
+      peakFocusHours: [9, 10, 14, 15],
+    };
+  }
+}
+
+/**
+ * Generate smart task recommendations based on AI analysis
+ */
+export async function generateSmartRecommendations(userData: {
+  tasks: any[];
+  timeEntries: any[];
+}): Promise<{
+  suggestedTasks: any[];
+  optimalScheduleBlocks: { hour: number; tasks: string[] }[];
+  automationOpportunities: string[];
+}> {
+  const prompt = `
+  Based on the following user data:
+  ${JSON.stringify(userData)}
+
+  Please provide:
+  1. Suggested tasks (new task ideas) based on patterns
+  2. Optimal schedule blocks for the day
+  3. Automation opportunities (tasks that can be automated/simplified)
+
+  Respond with JSON in this format:
+  {
+    "suggestedTasks": [
+      { "name": "Task name", "reason": "Why this task is suggested", "priority": "high|medium|low" }
+    ],
+    "optimalScheduleBlocks": [
+      { "hour": 9, "tasks": ["Task1", "Task2"] },
+      { "hour": 14, "tasks": ["Task3"] }
+    ],
+    "automationOpportunities": [
+      "Automate task #1 (weekly review)",
+      "Simplify task #2 (requires minimal decision making)"
+    ]
+  }
+  `;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1500,
+      temperature: 0.4,
+      system: 'You are an AI assistant specialized in providing personalized task recommendations and productivity strategies.',
+      messages: [
+        {
+          type: 'user',
+          content: prompt,
+        },
+      ],
+    });
+
+    const result = response.content[0]?.text;
+    if (!result) {
+      throw new Error('No response from Claude API');
+    }
+
+    // Parse JSON from Claude's response
+    const jsonMatch = result.match(/\{.*\}/s);
+    if (!jsonMatch) {
+      throw new Error('Could not parse AI response');
+    }
+
+    return JSON.parse(jsonMatch[0]);
+
+  } catch (error) {
+    console.error('Error generating smart recommendations:', error);
+    // Return fallback recommendations
+    return {
+      suggestedTasks: [],
+      optimalScheduleBlocks: [],
+      automationOpportunities: [
+        'Consider automating recurring tasks',
+        'Batch similar tasks together',
+        'Use templates for repetitive tasks'
+      ],
+    };
+  }
+}
