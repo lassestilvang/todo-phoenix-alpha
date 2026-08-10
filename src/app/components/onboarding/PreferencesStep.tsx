@@ -33,7 +33,7 @@ export function PreferencesStep() {
 
   const handleDarkModeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDarkModeEnabled(e.target.checked);
-    updatePreferences({ darkModeEnabled: e.target.checked });
+    updatePreferences({ darkMode: e.target.checked });
   };
 
   const handleVoiceDemoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,7 +49,7 @@ export function PreferencesStep() {
   const handleComplete = () => {
     // Save final preferences + complete onboarding
     updatePreferences({
-      darkModeEnabled: darkModeEnabled,
+      darkMode: darkModeEnabled,
     });
     nextStep();
   };
