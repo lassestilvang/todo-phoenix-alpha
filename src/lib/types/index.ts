@@ -10,6 +10,18 @@ export type RecurringPattern =
   | 'custom_n_weeks'
   | 'custom_days_of_month';
 
+export interface Project {
+  id: number;
+  name: string;
+  color: string;
+  emoji: string;
+  description: string | null;
+  parent_id: number | null;
+  created_at: string;
+  updated_at: string;
+  children?: Project[];
+}
+
 export interface List {
   id: number;
   name: string;
