@@ -27,4 +27,4 @@ export type {
   TaskFormData,
   SubtaskFormData,
   ViewType,
-} from './types';
+} from '../types';
