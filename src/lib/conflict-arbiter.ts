@@ -439,8 +439,8 @@ class ConflictArbiterImpl {
     active_conflicts: number;
     resolved_conflicts: number;
     avg_resolution_time_ms: number;
-    conflict_types: Record<string, number>;
-    resolution_strategies: Record<string, number>;
+    conflictTypes: Record<string, number>;
+    resolutionStrategies: Record<string, number>;
   } {
     const active = this.state.active_conflicts.size;
     const resolved = this.state.resolution_history.length;
@@ -465,8 +465,8 @@ class ConflictArbiterImpl {
       active_conflicts: active,
       resolved_conflicts: resolved,
       avg_resolution_time_ms: avgTime,
-      conflict_types,
-      resolution_strategies,
+      conflictTypes,
+      resolutionStrategies,
     };
   }
 }
@@ -489,18 +489,3 @@ export { ConflictArbiterImpl };
 
 // Alias for backward compatibility
 export const ConflictArbiter = ConflictArbiterImpl;
-
-// Add createConflict as alias for reportConflict
-declare module './conflict-arbiter' {
-  interface ConflictArbiterImpl {
-    createConflict: (conflict: Omit<ConflictEvent, 'id' | 'detected_at'>) => string;
-  }
-}
-
-export type {
-  ConflictEvent,
-  ConflictType,
-  ResolutionStrategy,
-  ConflictArbiterConfig,
-  ConflictArbiterState,
-};
