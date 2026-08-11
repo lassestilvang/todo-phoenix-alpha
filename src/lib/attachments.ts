@@ -30,8 +30,47 @@ export interface AttachmentUploadResult {
 }
 
 export interface AttachmentState {
-  attachments: Map<string, Attachment>; // taskId -> attachments map
+  attachments: Map<string, Map<string, Attachment>>; // taskId -> (attachmentId -> Attachment)
   uploadHistory: Array<{ id: string; taskId: string; status: 'success' | 'failed'; timestamp: number }>;
+
+  // Methods
+  uploadAttachment: (taskId: string, file: File) => Promise<AttachmentUploadResult>;
+  determineFileType: (filename: string) => AttachmentType;
+  getTaskAttachments: (taskId: string) => Attachment[];
+  getAttachment: (attachmentId: string) => Attachment | null;
+  createVersion: (attachmentId: string, newFile: File) => Promise<AttachmentUploadResult>;
+  deleteAttachment: (attachmentId: string) => boolean;
+  getThumbnail: (attachment: Attachment) => string | undefined;
+  getFileIcon: (attachment: Attachment) => string;
+}
+
+/**
+ * Determine file type from filename (standalone helper function)
+ */
+function determineFileType(filename: string): AttachmentType {
+  const extension = filename.toLowerCase().split('.').pop();
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+      return 'image';
+    case 'pdf':
+    case 'doc':
+    case 'docx':
+    case 'txt':
+      return 'document';
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return 'spreadsheet';
+    case 'ppt':
+    case 'pptx':
+      return 'presentation';
+    default:
+      return 'other';
+  }
 }
 
 export const useAttachments = create<AttachmentState>((set, get) => ({
@@ -53,7 +92,7 @@ export const useAttachments = create<AttachmentState>((set, get) => ({
       taskId,
       filename: file.name,
       originalName: file.name,
-      fileType: this.determineFileType(file.name),
+      fileType: determineFileType(file.name),
       fileSize: file.size,
       fileData: fileData || '',
       version: 1,
@@ -85,35 +124,17 @@ export const useAttachments = create<AttachmentState>((set, get) => ({
 
   // Determine file type from filename
   determineFileType: (filename: string): AttachmentType => {
-    const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
-    switch (ext) {
-      case '.png':
-      case '.jpg':
-      case '.jpeg':
-      case '.gif':
-      case '.webp':
-        return 'image';
-      case '.pdf':
-        return 'document';
-      case '.xlsx':
-      case '.xls':
-        return 'spreadsheet';
-      case '.pptx':
-      case '.ppt':
-        return 'presentation';
-      default:
-        return 'other';
-    }
+    return determineFileType(filename);
   },
 
   // Get attachments for a task
   getTaskAttachments: (taskId: string): Attachment[] => {
-    return get().attachments.get(taskId)?.values() ?? [];
+    return Array.from(get().attachments.get(taskId)?.values() ?? []);
   },
 
   // Get attachment by ID
   getAttachment: (attachmentId: string): Attachment | null => {
-    for (const [taskId, attachments] of get().attachments) {
+    for (const [, attachments] of get().attachments) {
       if (attachments.has(attachmentId)) {
         return attachments.get(attachmentId)!;
       }
