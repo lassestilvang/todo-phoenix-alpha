@@ -1,5 +1,17 @@
 import db from './schema';
 
+// Standalone rounding function
+function applyRounding(durationMinutes: number, rounding: 'none' | '5min' | '15min'): number {
+  switch (rounding) {
+    case '5min':
+      return Math.round(durationMinutes / 5) * 5;
+    case '15min':
+      return Math.round(durationMinutes / 15) * 15;
+    default:
+      return durationMinutes;
+  }
+}
+
 export interface TimeEntry {
   id: number;
   task_id: number;
@@ -14,6 +26,8 @@ export interface TimeEntry {
   approval_by?: number;
   approval_at?: string;
 }
+
+export { applyRounding };
 
 export const timeEntryOperations = {
   getAll: (): TimeEntry[] => {
@@ -65,22 +79,22 @@ export const timeEntryOperations = {
     );
 
     // Apply rounding
-    const roundedDuration = this.applyRounding(durationMinutes, active.rounding);
+    const roundedDuration = applyRounding(durationMinutes, active.rounding);
 
     db.prepare(
       'UPDATE time_entries SET stopped_at = ?, duration_minutes = ?, approved = 0 WHERE id = ?'
     ).run(now, roundedDuration, active.id);
 
     // Update task's actual_minutes
-    const task = db.prepare('SELECT actual_minutes FROM tasks WHERE id = ?').get(active.task_id) as { actual_minutes: number } | null;
-    if (task) {
+    const taskFromDb = db.prepare('SELECT actual_minutes FROM tasks WHERE id = ?').get(active.task_id) as { actual_minutes: number } | null;
+    if (taskFromDb) {
       db.prepare(
         'UPDATE tasks SET actual_minutes = actual_minutes + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
       ).run(roundedDuration, active.task_id);
     }
 
     return db.prepare('SELECT * FROM time_entries WHERE id = ?')
-      .run(active.id) as TimeEntry;
+      .get(active.id) as TimeEntry;
   },
 
   update: (id: number, data: Partial<Omit<TimeEntry, 'id' | 'task_id' | 'started_at' | 'created_at'>>): void => {
@@ -139,18 +153,6 @@ export const timeEntryOperations = {
     `).get(taskId) as { total_minutes: number } | undefined;
 
     return result?.total_minutes || 0;
-  },
-
-  // Apply rounding to duration
-  applyRounding: (durationMinutes: number, rounding: 'none' | '5min' | '15min'): number => {
-    switch (rounding) {
-      case '5min':
-        return Math.round(durationMinutes / 5) * 5;
-      case '15min':
-        return Math.round(durationMinutes / 15) * 15;
-      default:
-        return durationMinutes;
-    }
   },
 
   // Submit for approval
@@ -215,4 +217,5 @@ export const timeEntryOperations = {
       ORDER BY total_minutes DESC
     `).all(startDate, endDate);
   }
+
 };
