@@ -47,6 +47,9 @@ export interface AgentWorkloadMetrics {
   current_load_percentage: number;
   peak_load_percentage: number;
   task_spillage_rate: number;
+  lastCompletion?: number;
+  lastStart?: number;
+  lastFailure?: number;
 }
 
 export interface AgentConflictResolutionResult {
@@ -88,7 +91,24 @@ export type AgentOSState = {
       resolution?: string;
       timestamp: number;
     };
+    currentTaskId?: string;
   }>;
+  // Store methods
+  registerAgent(agentProfile: AgentCapabilityProfile): string;
+  getContext(agentId: string): any;
+  getAgent(agentId: string): AgentCapabilityProfile | undefined;
+  updateContext(agentId: string, updates: Partial<{ currentPhase: string; focusLevel: number; energyLevel: number; availableSince: number }>): void;
+  updateAgentHeartbeat(agentId: string): void;
+  acquireLock(taskId: string, agentId: string): boolean;
+  releaseLock(taskId: string): void;
+  isLocked(taskId: string): boolean;
+  updateWorkloadMetrics(agentId: string, success: boolean, error?: string): void;
+  assignTask(task: AgentTask, agentId: string): { success: boolean; assignedAgentId?: string };
+  completeTask(taskId: string, agentId: string): void;
+  registerPhase(phase: string, agents: Set<string>, priority: number): void;
+  getAgentsInPhase(phase: string): Set<string>;
+  routeTask(task: AgentTask): string | null;
+  getAvailableAgents(requiredCapabilities: string[], minAvailability?: number): AgentCapabilityProfile[];
 };
 
 export type AgentTask = {
@@ -103,6 +123,7 @@ export type AgentTask = {
   created_at: number;
   started_at?: number;
   completed_at?: number;
+  required_context?: string[];
 };
 
 export type AgentTaskQueue = {
@@ -259,6 +280,9 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
         focusLevel: 100,
         energyLevel: 100,
         availableSince: Date.now(),
+        lastHeartbeat: Date.now(),
+        workField: 'creative',
+        lastConflict: undefined,
       });
 
       return {
@@ -312,9 +336,13 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
       const now = Date.now();
       const lastHeartbeat = now;
 
+      // Get agent context for availableSince
+      const agentContext = state.agent_contexts.get(agentId);
+      const contextAvailableSince = agentContext?.availableSince || now;
+
       // Apply priority decay if no activity for a while
       let availabilityScore = 100;
-      const decayMinutes = (now - (agent.availableSince || now)) / 60000;
+      const decayMinutes = (now - (contextAvailableSince || now)) / 60000;
       if (decayMinutes > 0) {
         availabilityScore = Math.max(0, 100 - (decayMinutes * state.coordination_config.priority_decay_rate * 100));
       }
@@ -323,7 +351,6 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
         agents: new Map(state.agents).set(agentId, {
           ...agent,
           availability_score: availabilityScore,
-          lastHeartbeat,
         }),
       };
     });
@@ -487,7 +514,7 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
       updatedContext.currentTaskId = task.id;
       updatedContext.currentPhase = 'in_progress';
       updatedContext.focusLevel = 100;
-      updatedContext.energyLevel = Math.max(0, agentProfile.energyLevel - 10);
+      updatedContext.energyLevel = Math.max(0, agentProfile.energy_level - 10);
 
       const updatedWorkload = newWorkloads.get(agentId)!;
       updatedWorkload.active_tasks = (updatedWorkload.active_tasks || 0) + 1;
@@ -516,21 +543,12 @@ export const useAgentOS = create<AgentOSState>((set, get) => ({
     // Mark task as completed in queue
     get().global_queue.markCompleted(taskId, agentId);
 
-        // Update agent state (including the agent context for currentTaskId)
+        // Update agent state (clearing the agent context for currentTaskId)
     set(state => {
       const agents = new Map(state.agents);
       const workloads = new Map(state.workloads);
       const agent_contexts = new Map(state.agent_contexts);
 
-      const agent = agents.get(agentId);
-      if (agent) {
-        agent.currentTaskId = undefined;
-        agent.currentPhase = 'idle';
-        agent.focusLevel = 100;
-        agent.energyLevel = Math.min(100, agent.energyLevel + 20);
-      }
-
-      // Update agent context to remove currentTaskId
       const context = agent_contexts.get(agentId);
       if (context) {
         context.currentTaskId = undefined;
