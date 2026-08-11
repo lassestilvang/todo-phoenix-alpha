@@ -462,7 +462,7 @@ class BackchannelAgentImpl {
    * Emit event
    */
   emit(event: string, data?: any): void {
-    this.listeners.emit(event, data);
+    this.state.listeners.emit(event, data);
   }
 
   /**
@@ -530,4 +530,3 @@ export function createBackchannelAgent(): BackchannelAgentImpl {
 }
 
 export { BackchannelAgentImpl };
-export type { BackchannelMessage, PeerConnection, BackchannelConfig };
