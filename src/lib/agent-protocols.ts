@@ -187,7 +187,7 @@ interface AgentNotificationInterface extends LifeCycleEvents {
   readonly _expiry: number;
   readonly _initialization_phase: boolean;
   readonly _call_counter: number;
-  readonly _heartbeat_timer: NodeJS.Timeout;
+  readonly _heartbeat_timer: any; // Return type for the timer implementation
 }
 export const agentLifeCycle: AgentNotificationInterface = {
   registerAgent: () => console.log('registerAgent called'),
@@ -204,16 +204,16 @@ export const agentLifeCycle: AgentNotificationInterface = {
     return 0;
   },
   get _heartbeat_timer() {
-    let timer = null;
+    let timer: NodeJS.Timeout | null = null;
     return {
       id: 'heartbeat',
       interval: 5000, // 5s heartbeat interval
       start: () => {
         timer = setInterval(() => {
           console.log('Heartbeat sent');
-        }, this.interval);
+        }, 5000);
       },
-      stop: () => clearInterval(timer)
+      stop: () => { if (timer) clearInterval(timer); }
     };
   }
 };
