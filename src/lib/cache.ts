@@ -26,9 +26,15 @@ class LRUCache<K, V> {
     // Remove oldest item if at capacity
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
     this.cache.set(key, value);
+  }
+
+  keys(): IterableIterator<K> {
+    return this.cache.keys();
   }
 
   has(key: K): boolean {
@@ -59,19 +65,33 @@ export const cacheRegistry = {
 // Helper function to invalidate cache entries
 export function invalidateCache(pattern?: RegExp): void {
   if (pattern) {
-    // Invalidate cache keys matching the pattern
-    for (const cache of Object.values(cacheRegistry)) {
-      for (const key of Array.from(cache.keys())) {
-        if (pattern.test(String(key))) {
-          cache.delete(key);
-        }
+    // Invalidate cache keys matching the pattern - handle each cache type explicitly
+    for (const key of cacheRegistry.taskStats.keys()) {
+      if (pattern.test(String(key))) {
+        cacheRegistry.taskStats.delete(key);
+      }
+    }
+    for (const key of cacheRegistry.upcomingTasks.keys()) {
+      if (pattern.test(String(key))) {
+        cacheRegistry.upcomingTasks.delete(key);
+      }
+    }
+    for (const key of cacheRegistry.productivityInsights.keys()) {
+      if (pattern.test(String(key))) {
+        cacheRegistry.productivityInsights.delete(key);
+      }
+    }
+    for (const key of cacheRegistry.aiSuggestions.keys()) {
+      if (pattern.test(String(key))) {
+        cacheRegistry.aiSuggestions.delete(key);
       }
     }
   } else {
     // Clear all caches
-    for (const cache of Object.values(cacheRegistry)) {
-      cache.clear();
-    }
+    cacheRegistry.taskStats.clear();
+    cacheRegistry.upcomingTasks.clear();
+    cacheRegistry.productivityInsights.clear();
+    cacheRegistry.aiSuggestions.clear();
   }
 }
 
