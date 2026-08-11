@@ -11,12 +11,11 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface AgentCapabilities {
-  deep_work?: boolean;
-  creative?: boolean;
-  interrupt_handling?: boolean;
-  context_sharing?: boolean;
-  data_analysis?: boolean;
-  [key: string]: boolean;
+  deep_work: boolean;
+  creative: boolean;
+  interrupt_handling: boolean;
+  context_sharing: boolean;
+  data_analysis: boolean;
 }
 
 export interface AgentContext {
@@ -77,6 +76,7 @@ export const useAgentRegistry = create<{
       id: agentId,
       name: registration.name,
       version: '1.0.0',
+      capabilities: registration.capabilities,
       lastSeen: now,
       totalTasksCompleted: 0,
       avgTaskDuration: 0,
