@@ -3,7 +3,7 @@ let db: any;
 
 if (typeof window === 'undefined') {
   // Server-side only
-  import('better-sqlite3').then(Database => {
+  import('better-sqlite3').then(({ default: Database }) => {
     import('path').then(path => {
       const dbPath = path.join(process.cwd(), 'data', 'planner.db');
       db = new Database(dbPath);
