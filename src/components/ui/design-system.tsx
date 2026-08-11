@@ -292,7 +292,7 @@ export function getColor(theme: ColorScheme, shade: ColorShade): string {
 // Component wrapper that applies design tokens
 interface TokenWrapperProps {
   className?: string;
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
   tokens?: Partial<DesignTokens>;
 }
 
@@ -333,11 +333,11 @@ export function getThemeColors(theme: ColorScheme, dark: boolean = false): {
     primary: primary400,
     primaryHover: primary700,
     primaryActive: colorTokens[theme][dark ? '700' : '600'],
-    background: dark ? colorTokens.gray[900] : 'white',
-    backgroundSecondary: dark ? colorTokens.gray[800] : colorTokens.gray[50],
-    text: dark ? 'white' : colorTokens.gray[900],
-    textSecondary: dark ? colorTokens.gray[400] : colorTokens.gray[600],
-    border: dark ? colorTokens.gray[700] : colorTokens.gray[200],
+    background: dark ? '#1a1a1a' : 'white',
+    backgroundSecondary: dark ? '#2d2d2d' : '#f5f5f5',
+    text: dark ? '#ffffff' : '#1a1a1a',
+    textSecondary: dark ? '#a3a3a3' : '#525252',
+    border: dark ? '#404040' : '#e5e7eb',
     accent: primary500,
   };
 }
