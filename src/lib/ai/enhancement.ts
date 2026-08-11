@@ -54,19 +54,24 @@ export async function generateTaskSuggestions(
       system: 'You are an AI assistant specialized in task optimization and productivity suggestions.',
       messages: [
         {
-          type: 'user',
+          role: 'user',
           content: prompt,
         },
       ],
     });
 
-    const result = response.content[0]?.text;
+    const resultBlock = response.content[0];
+    if (!resultBlock || !('text' in resultBlock)) {
+      throw new Error('No response from Claude API');
+    }
+
+    const result = (resultBlock as { text: string }).text;
     if (!result) {
       throw new Error('No response from Claude API');
     }
 
     // Parse JSON from Claude's response
-    const jsonMatch = result.match(/\{.*\}/s);
+    const jsonMatch = result.match(/\{[^]*\}/);
     if (!jsonMatch) {
       throw new Error('Could not parse AI response');
     }
@@ -145,19 +150,24 @@ export async function generateInsights(userData: {
       system: 'You are an AI assistant specialized in analyzing productivity data and providing actionable insights.',
       messages: [
         {
-          type: 'user',
+          role: 'user',
           content: prompt,
         },
       ],
     });
 
-    const result = response.content[0]?.text;
+    const resultBlock = response.content[0];
+    if (!resultBlock || !('text' in resultBlock)) {
+      throw new Error('No response from Claude API');
+    }
+
+    const result = (resultBlock as { text: string }).text;
     if (!result) {
       throw new Error('No response from Claude API');
     }
 
     // Parse JSON from Claude's response
-    const jsonMatch = result.match(/\{.*\}/s);
+    const jsonMatch = result.match(/\{[^]*\}/);
     if (!jsonMatch) {
       throw new Error('Could not parse AI response');
     }
@@ -221,19 +231,24 @@ export async function generateSmartRecommendations(userData: {
       system: 'You are an AI assistant specialized in providing personalized task recommendations and productivity strategies.',
       messages: [
         {
-          type: 'user',
+          role: 'user',
           content: prompt,
         },
       ],
     });
 
-    const result = response.content[0]?.text;
+    const resultBlock = response.content[0];
+    if (!resultBlock || !('text' in resultBlock)) {
+      throw new Error('No response from Claude API');
+    }
+
+    const result = (resultBlock as { text: string }).text;
     if (!result) {
       throw new Error('No response from Claude API');
     }
 
     // Parse JSON from Claude's response
-    const jsonMatch = result.match(/\{.*\}/s);
+    const jsonMatch = result.match(/\{[^]*\}/);
     if (!jsonMatch) {
       throw new Error('Could not parse AI response');
     }
