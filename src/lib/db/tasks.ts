@@ -1,5 +1,5 @@
 import db from './schema';
-import { Task, TaskWithDetails, TaskFormData } from '../types';
+import { Task, TaskWithDetails, TaskFormData, RecurringPattern } from '../types';
 
 // Helper function to calculate next occurrence date based on recurrence pattern
 export const calculateNextOccurrence = (
@@ -265,7 +265,7 @@ export const taskOperations = {
     const task = taskOperations.getById(taskId);
     if (!task || !task.is_recurring || !task.recurring_pattern) return null;
 
-    const baseDate = task.date ? new Date(task.date) : undefined;
+    const baseDate = task.date ? new Date(task.date) : null;
     const nextDate = calculateNextOccurrence(
       baseDate,
       task.recurring_pattern,
@@ -278,17 +278,14 @@ export const taskOperations = {
     const nextTaskData: TaskFormData = {
       list_id: task.list_id,
       name: task.name,
-      description: task.description,
+      description: task.description === null ? undefined : task.description,
       date: nextDate,
       deadline: task.deadline ? new Date(task.deadline) : undefined,
       estimate_minutes: task.estimate_minutes,
       priority: task.priority,
       is_recurring: task.is_recurring === 1,
-      recurring_pattern: task.recurring_pattern,
-      recurring_custom_value: task.recurring_custom_value,
-      reminder_minutes: task.reminder_minutes,
-      reminder_time: task.reminder_time,
-      label_ids: task.labels?.map(label => label.id) || []
+      recurring_pattern: task.recurring_pattern as RecurringPattern | undefined,
+      recurring_custom_value: task.recurring_custom_value ?? undefined,
     };
 
     // Create the new occurrence
