@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
+import React from 'react';
 
 // WebSocket server instance
-let wss: WebSocket.Server | null = null;
+let wss: any = null;
 
 // Track connected users and their rooms
 type ConnectedUser = {
@@ -18,9 +19,9 @@ const connectedUsers = new Map<string, ConnectedUser>();
 export function initCollaborationServer() {
   if (wss) return wss; // Already initialized
 
-  wss = new WebSocket.Server({ port: 8080 });
+  wss = new (WebSocket as any).Server({ port: 8080 });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws: WebSocket) => {
     console.log('New client connected to collaboration server');
 
     // User joins with their ID on first message
@@ -70,17 +71,18 @@ export function initCollaborationServer() {
 function handleClientMessage(ws: WebSocket, data: any, userId: string | null) {
   // Handle user joining with their ID
   if (data.type === 'join' && data.payload?.userId) {
-    userId = data.payload.userId;
+    const newUserId = data.payload.userId;
+    userId = newUserId;
 
     // Register user
-    if (!connectedUsers.has(userId)) {
-      connectedUsers.set(userId, {
-        userId,
+    if (!connectedUsers.has(newUserId)) {
+      connectedUsers.set(newUserId, {
+        userId: newUserId,
         socket: ws,
         rooms: new Set()
       });
     }
-    const user = connectedUsers.get(userId)!;
+    const user = connectedUsers.get(newUserId)!;
     user.socket = ws; // Update in case socket changed
 
     // Subscribe to rooms if provided
@@ -90,15 +92,15 @@ function handleClientMessage(ws: WebSocket, data: any, userId: string | null) {
         // Notify existing users in room
         broadcastToRoom(room, {
           type: 'user-joined',
-          payload: { userId, timestamp: new Date().toISOString() },
-          senderId: userId
+          payload: { userId: newUserId, timestamp: new Date().toISOString() },
+          senderId: newUserId
         });
       });
     }
 
     ws.send(JSON.stringify({
       type: 'join-ack',
-      payload: { userId, connected: true }
+      payload: { userId: newUserId, connected: true }
     }));
     return;
   }
@@ -247,7 +249,7 @@ function handleAck(payload: any, userId: string) {
  */
 function broadcastToRoom(room: string, message: any, excludeSocket?: WebSocket) {
   const messageStr = JSON.stringify(message);
-  wss?.clients.forEach((client) => {
+  wss?.clients.forEach((client: WebSocket) => {
     if (client.readyState === WebSocket.OPEN && client !== excludeSocket) {
       // Check if client is subscribed to this room
       // In a production system, we'd track room subscriptions per client
@@ -262,7 +264,7 @@ function broadcastToRoom(room: string, message: any, excludeSocket?: WebSocket) 
  */
 export function broadcastToAll(message: any) {
   const messageStr = JSON.stringify(message);
-  wss?.clients.forEach((client) => {
+  wss?.clients.forEach((client: WebSocket) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(messageStr);
     }
@@ -316,7 +318,7 @@ export function useCollaboration(userId: string, onMessageCallback: (data: any) 
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const data = JSON.parse(event.data as string) as any;
         onMessageCallback(data);
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
