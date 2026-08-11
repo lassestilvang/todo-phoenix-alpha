@@ -40,7 +40,15 @@ export const reminderOperations = {
       'INSERT INTO reminders (task_id, time) VALUES (?, ?)'
     ).run(taskId, time);
 
-    return this.getById(result.lastInsertRowid as number)!;
+    const reminderId = result.lastInsertRowid;
+    if (typeof reminderId !== 'number' || !Number.isFinite(reminderId)) {
+      throw new Error('Failed to get inserted reminder ID');
+    }
+    const reminder = db.prepare('SELECT * FROM reminders WHERE id = ?').get(reminderId) as Reminder;
+    if (!reminder) {
+      throw new Error('Failed to create reminder');
+    }
+    return reminder;
   },
 
   update: (id: number, updates: Partial<Reminder>): Reminder => {
@@ -66,11 +74,20 @@ export const reminderOperations = {
 
     db.prepare(`UPDATE reminders SET ${updatesArray.join(', ')} WHERE id = ?`).run(...values, id);
 
-    return this.getById(id)!;
+    const updatedReminder = db.prepare('SELECT * FROM reminders WHERE id = ?').get(id) as Reminder;
+    if (!updatedReminder) {
+      throw new Error('Failed to update reminder');
+    }
+    return updatedReminder;
   },
 
   markAsSent: (id: number): Reminder => {
-    return this.update(id, { is_sent: true, sent_at: new Date().toISOString() });
+    const updatesArray = ['is_sent = ?', 'sent_at = CURRENT_TIMESTAMP'];
+    const values = [1, id];
+    db.prepare(`UPDATE reminders SET ${updatesArray.join(', ')} WHERE id = ?`).run(...values);
+    const updatedReminder = db.prepare('SELECT * FROM reminders WHERE id = ?').get(id) as Reminder;
+    if (!updatedReminder) throw new Error('Failed to update reminder');
+    return updatedReminder;
   },
 
   delete: (id: number): void => {
