@@ -1,8 +1,17 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+// Node-only database setup for better-sqlite3
+let db: any;
 
-const dbPath = path.join(process.cwd(), 'data', 'planner.db');
-const db = new Database(dbPath);
+if (typeof window === 'undefined') {
+  // Server-side only
+  import('better-sqlite3').then(Database => {
+    import('path').then(path => {
+      const dbPath = path.join(process.cwd(), 'data', 'planner.db');
+      db = new Database(dbPath);
+      // Enable foreign keys
+      db.pragma('foreign_keys = ON');
+    });
+  });
+}
 
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
