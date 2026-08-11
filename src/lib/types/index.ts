@@ -35,6 +35,7 @@ export interface Task {
   is_recurring: number;
   recurring_pattern: string | null;
   recurring_custom_value: string | null;
+  dependencies: string | null;
   created_at: string;
   updated_at: string;
 }
