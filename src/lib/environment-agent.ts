@@ -119,7 +119,7 @@ export const useEnvironmentAgent = create<{
 
     // Time-based context
     if (hour >= prefs.workHours.start && hour < prefs.workHours.end) {
-      context = 'work';
+      context = 'deep_work';
       confidence = 0.6;
       signals.workHours = true;
     } else {
@@ -136,7 +136,7 @@ export const useEnvironmentAgent = create<{
       signals.idle = true;
       signals.idleDuration = timeSinceInput;
     } else if (timeSinceInput > 60000) { // 1 minute inactive
-      context = 'distracted';
+      context = 'interrupt';
       confidence = 0.4;
       signals.lowActivity = true;
     }
