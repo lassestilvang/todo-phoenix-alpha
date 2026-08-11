@@ -2,14 +2,17 @@ import { encryption } from '../utils';
 
 // Encryption service for sensitive data
 export class EncryptionService {
-  private key: CryptoKey;
+  private key: CryptoKey | null = null;
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
-  constructor() {
-    // Initialize with a derived key from environment variables
-    this.key = await this.initializeKey();
+  async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    this.initPromise ??= this._initialize();
+    await this.initPromise;
   }
 
-  private async initializeKey(): Promise<CryptoKey> {
+  private async _initialize(): Promise<void> {
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
       new TextEncoder().encode(process.env.ENCRYPTION_KEY || 'default-fallback-key'),
@@ -18,20 +21,23 @@ export class EncryptionService {
       ['deriveBits', 'deriveKey']
     );
 
-    return crypto.subtle.deriveKey(
+    this.key = await crypto.subtle.deriveKey(
       { name: 'PBKDF2', salt: new TextEncoder().encode('todo-phoenix-alpha-salt'), iterations: 100000, hash: 'SHA-256' },
       keyMaterial,
       { name: 'AES-GCM', length: 256 },
       false,
       ['encrypt', 'decrypt']
     );
+
+    this.initialized = true;
   }
 
   async encrypt(data: string): Promise<string> {
+    await this.ensureInitialized();
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv },
-      this.key,
+      this.key!,
       new TextEncoder().encode(data)
     );
 
@@ -44,10 +50,10 @@ export class EncryptionService {
   }
 
   async decrypt(encryptedData: string): Promise<string> {
-    const combined = new Uint8Array();
+    await this.ensureInitialized();
     // Decode Base64
     const decoded = atob(encryptedData);
-    combined = new Uint8Array(decoded.length);
+    const combined = new Uint8Array(decoded.length);
     for (let i = 0; i < decoded.length; i++) {
       combined[i] = decoded.charCodeAt(i);
     }
@@ -57,7 +63,7 @@ export class EncryptionService {
 
     const decrypted = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
-      this.key,
+      this.key!,
       actualEncrypted
     );
 
@@ -65,5 +71,5 @@ export class EncryptionService {
   }
 }
 
-// Export singleton instance
+// Export singleton instance - initialize lazily
 export const encryptionService = new EncryptionService();
