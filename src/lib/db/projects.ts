@@ -7,8 +7,11 @@ export const projects = {
   },
 
   getById: (id: number): Project | null => {
-    const result = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-    return result as Project | null;
+    const result = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | null | undefined;
+    if (result === undefined) {
+      return null;
+    }
+    return result;
   },
 
   create: (data: Omit<Project, 'id'>): Project => {
@@ -23,16 +26,20 @@ export const projects = {
       data.parent_id ?? null
     );
 
-    const projectId = result.lastInsertRowid as number;
-    const project = this.getById(projectId);
-    if (!project) {
+    const projectId = result.lastInsertRowid;
+    if (typeof projectId !== 'number' || !Number.isFinite(projectId)) {
+      throw new Error('Failed to get inserted project ID');
+    }
+    // Fetch the newly created project
+    const projectRow = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId) as Project;
+    if (!projectRow) {
       throw new Error('Failed to create project');
     }
-    return project;
+    return projectRow;
   },
 
   update: (id: number, updates: Partial<Omit<Project, 'id'>>): Project => {
-    const current = this.getById(id);
+    const current = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | null;
     if (!current) throw new Error('Project not found');
 
     const updateFields: string[] = [];
@@ -65,7 +72,7 @@ export const projects = {
       db.prepare(`UPDATE projects SET ${updateFields.join(', ')} WHERE id = ?`).run(...updateValues);
     }
 
-    const updated = this.getById(id);
+    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project;
     if (!updated) {
       throw new Error('Failed to update project');
     }
@@ -85,13 +92,13 @@ export const projects = {
   },
 
   getHierarchy: (): Project[] => {
-    const allProjects = this.getAll();
+    const allProjects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all() as Project[];
     const projectMap = new Map<number, Project>();
     const rootProjects: Project[] = [];
 
     // First pass: create map and initialize children array
     allProjects.forEach(project => {
-      project.children = [];
+      project.children = project.children ?? [];
       projectMap.set(project.id, project);
     });
 
@@ -100,7 +107,7 @@ export const projects = {
       if (project.parent_id !== null) {
         const parent = projectMap.get(project.parent_id);
         if (parent) {
-          parent.children.push(project);
+          parent.children!.push(project);
         }
       } else {
         rootProjects.push(project);
@@ -119,12 +126,12 @@ export const projects = {
   // New: Get project path from root
   getPath: (id: number): Project[] => {
     const path: Project[] = [];
-    let current = this.getById(id);
+    let current: Project | null | undefined = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
 
     while (current) {
       path.unshift(current);
       if (current.parent_id === null) break;
-      current = this.getById(current.parent_id);
+      current = db.prepare('SELECT * FROM projects WHERE id = ?').get(current.parent_id) as Project | undefined;
     }
 
     return path;
