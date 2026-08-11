@@ -16,6 +16,10 @@ export interface TimeEntry {
 }
 
 export const timeEntryOperations = {
+  getAll: (): TimeEntry[] => {
+    return db.prepare('SELECT * FROM time_entries ORDER BY started_at DESC').all() as TimeEntry[];
+  },
+
   getAllForTask: (taskId: number): TimeEntry[] => {
     return db.prepare(
       'SELECT * FROM time_entries WHERE task_id = ? ORDER BY started_at DESC'
@@ -124,6 +128,17 @@ export const timeEntryOperations = {
       GROUP BY te.task_id
       ORDER BY total_minutes DESC
     `).all(startDate, endDate);
+  },
+
+  // Get total time for a specific task
+  getTotalTimeForTask: (taskId: number): number => {
+    const result = db.prepare(`
+      SELECT SUM(duration_minutes) as total_minutes
+      FROM time_entries
+      WHERE task_id = ?
+    `).get(taskId) as { total_minutes: number } | undefined;
+
+    return result?.total_minutes || 0;
   },
 
   // Apply rounding to duration
