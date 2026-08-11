@@ -1,4 +1,4 @@
-import type { Task, TaskWithDetails, TimeEntry } from '@/types';
+import type { Task, TaskWithDetails, TimeEntry } from '@/lib/types/index';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 
 export interface ProductivityMetrics {
