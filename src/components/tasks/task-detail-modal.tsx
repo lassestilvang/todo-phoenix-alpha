@@ -74,7 +74,7 @@ export function TaskDetailModal({
     checkActiveEntry()
   }, [open, task.id])
 
-  const isOverdue = task.deadline && !task.is_completed && new Date(task.deadline) < new Date()
+  const isOverdue = !!(task.deadline && !task.is_completed && new Date(task.deadline) < new Date())
 
   const handleStartTimer = async () => {
     await startTimeEntry(task.id)
@@ -82,7 +82,7 @@ export function TaskDetailModal({
   }
 
   const handleStopTimer = async () => {
-    await stopTimeEntry(task.id, new Date(), Math.floor(elapsedSeconds / 60))
+    await stopTimeEntry(task.id)
     stopTimer()
   }
 
@@ -132,6 +132,14 @@ export function TaskDetailModal({
                 onStopTimer={handleStopTimer}
                 attachedFile={attachedFile}
                 handleFileUpload={handleFileUpload}
+                isRunning={isRunning}
+                elapsedSeconds={elapsedSeconds}
+                formatTimeFunc={formatTime}
+                isMobile={isMobile}
+                onToggleSubtaskComplete={onToggleSubtaskComplete}
+                onDeleteSubtask={onDeleteSubtask}
+                onEditSubtask={onEditSubtask}
+                onCreateSubtask={onCreateSubtask}
               />
             </ScrollArea>
           </div>
@@ -179,6 +187,14 @@ export function TaskDetailModal({
                   onStopTimer={handleStopTimer}
                   attachedFile={attachedFile}
                   handleFileUpload={handleFileUpload}
+                  isRunning={isRunning}
+                  elapsedSeconds={elapsedSeconds}
+                  formatTimeFunc={formatTime}
+                  isMobile={isMobile}
+                  onToggleSubtaskComplete={onToggleSubtaskComplete}
+                  onDeleteSubtask={onDeleteSubtask}
+                  onEditSubtask={onEditSubtask}
+                  onCreateSubtask={onCreateSubtask}
                 />
               </div>
             </ScrollArea>
@@ -200,6 +216,14 @@ function MobileTaskContent({
   onStopTimer,
   attachedFile,
   handleFileUpload,
+  isRunning,
+  elapsedSeconds,
+  formatTimeFunc,
+  isMobile,
+  onToggleSubtaskComplete,
+  onDeleteSubtask,
+  onEditSubtask,
+  onCreateSubtask,
 }: {
   task: TaskWithDetails
   isOverdue: boolean
@@ -210,6 +234,14 @@ function MobileTaskContent({
   onStopTimer: () => void
   attachedFile: File | null
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  isRunning: boolean
+  elapsedSeconds: number
+  formatTimeFunc: (seconds: number) => string
+  isMobile: boolean
+  onToggleSubtaskComplete: (subtaskId: number) => void
+  onDeleteSubtask: (subtaskId: number) => void
+  onEditSubtask: (subtaskId: number) => void
+  onCreateSubtask: () => void
 }) {
   const [showTabs, setShowTabs] = useState(false)
 
@@ -223,7 +255,7 @@ function MobileTaskContent({
             <Timer className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Timer</p>
-              <p className="font-mono font-medium">{formatTime(elapsedSeconds)}</p>
+              <p className="font-mono font-medium">{formatTimeFunc(elapsedSeconds)}</p>
             </div>
           </div>
 
