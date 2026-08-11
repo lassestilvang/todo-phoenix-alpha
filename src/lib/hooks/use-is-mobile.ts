@@ -11,7 +11,7 @@ export function useIsMobile(): boolean {
     // Function to check if device is mobile
     const checkIfMobile = () => {
       // Check user agent for mobile indicators
-      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
 
       // Common mobile device detection
       const isMobileDevice = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
@@ -71,7 +71,7 @@ export function useTouchCapability(): boolean {
       return (
         'ontouchstart' in window ||
         navigator.maxTouchPoints > 0 ||
-        navigator.msMaxTouchPoints > 0
+        (navigator as any).msMaxTouchPoints > 0
       );
     };
 
