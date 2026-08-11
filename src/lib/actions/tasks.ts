@@ -9,7 +9,7 @@ export const enhancedTaskOperations = {
 
     // Audit log
     auditLogger.log({
-      action: AuditAction.task_created,
+      action: 'task_created',
       tableName: 'tasks',
       recordId: result.id,
       newValues: { name: result.name, list_id: result.list_id, priority: result.priority, is_recurring: result.is_recurring },
@@ -37,7 +37,7 @@ export const enhancedTaskOperations = {
 
     // Audit log the change
     auditLogger.log({
-      action: AuditAction.task_updated,
+      action: 'task_updated',
       tableName: 'tasks',
       recordId: id,
       oldValues,
@@ -61,7 +61,7 @@ export const enhancedTaskOperations = {
 
     // Audit log before deletion
     auditLogger.log({
-      action: AuditAction.task_deleted,
+      action: 'task_deleted',
       tableName: 'tasks',
       recordId: id,
       oldValues: { name: task.name, priority: task.priority, is_completed: task.is_completed },
@@ -70,7 +70,7 @@ export const enhancedTaskOperations = {
 
     // Also log change history entry
     auditLogger.log({
-      action: AuditAction.task_updated,
+      action: 'task_updated',
       tableName: 'tasks',
       recordId: id,
       oldValues: { name: task.name, priority: task.priority, is_completed: task.is_completed, deleted: true },
@@ -85,7 +85,7 @@ export const enhancedTaskOperations = {
   toggleComplete: (id: number, userId?: string) => {
     const task = taskOperations.toggleComplete(id);
     auditLogger.log({
-      action: AuditAction.task_completed,
+      action: 'task_completed',
       tableName: 'tasks',
       recordId: id,
       newValues: { is_completed: task.is_completed, elapsed_minutes: task.actual_minutes },
@@ -97,7 +97,7 @@ export const enhancedTaskOperations = {
   // Audit log integration for other operations
   logTaskChange: (taskId: number, field: string, oldValue: unknown, newValue: unknown, userId?: string) => {
     auditLogger.log({
-      action: AuditAction.task_updated,
+      action: 'task_updated',
       tableName: 'tasks',
       recordId: taskId,
       oldValues: { [field]: oldValue },
