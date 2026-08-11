@@ -4,15 +4,17 @@
 // Acts as a thin wrapper around the ConflictArbiterImpl
 // for easier usage in different contexts
 
-import { ConflictArbiterImpl, ConflictEvent, ResolutionStrategy } from './conflict-arbiter';
+import { ConflictArbiterImpl, ConflictEvent, ResolutionStrategy } from '../conflict-arbiter';
 import { EventEmitter } from 'events';
 
 
 export class ConflictArbiterService extends EventEmitter {
-  private arbiter: ConflictArbiterImpl = new ConflictArbiterImpl();
+  private arbiter: ConflictArbiterImpl;
 
   constructor() {
+    super();
     // Start the arbiter by default
+    this.arbiter = new ConflictArbiterImpl();
     this.arbiter.start();
   }
 
