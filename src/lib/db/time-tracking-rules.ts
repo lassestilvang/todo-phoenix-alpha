@@ -222,10 +222,17 @@ export const getTimeTrackingManager = (): TimeTrackingManager => {
 // Initialize with existing rules from database
 export const initializeTimeTrackingRules = (): void => {
   const manager = getTimeTrackingManager();
-  const rules = db.prepare('SELECT * FROM time_tracking_rules').all() as TimeTrackingRule[];
+  const rawRules = db.prepare('SELECT * FROM time_tracking_rules').all() as any[];
+  const rules = rawRules.map(rule => {
+    // Convert database integer (0/1) to boolean for require_description field
+    const convertedRule = {
+      ...rule,
+      require_description: Boolean(rule.require_description),
+      allowed_days: rule.allowed_days ? JSON.parse(rule.allowed_days) : null
+    };
+    return convertedRule as TimeTrackingRule;
+  });
   rules.forEach(rule => {
-    rule.require_description = rule.require_description === 1;
-    rule.allowed_days = rule.allowed_days ? JSON.parse(rule.allowed_days) : null;
     manager.addRule(rule);
   });
 };
