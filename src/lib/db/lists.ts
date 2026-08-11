@@ -15,7 +15,7 @@ export const listOperations = {
       INSERT INTO lists (name, color, emoji, icon)
       VALUES (?, ?, ?, ?)
     `).run(name, color, emoji, icon);
-    
+
     return listOperations.getById(result.lastInsertRowid as number)!;
   },
 
@@ -27,13 +27,13 @@ export const listOperations = {
 
     const setClause = fields.map(field => `${field} = ?`).join(', ');
     const values = fields.map(field => updates[field as keyof typeof updates]);
-    
+
     db.prepare(`
-      UPDATE lists 
+      UPDATE lists
       SET ${setClause}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(...values, id);
-    
+
     return listOperations.getById(id)!;
   },
 
@@ -41,7 +41,7 @@ export const listOperations = {
     db.prepare('DELETE FROM lists WHERE id = ?').run(id);
   },
 
-  getDefault: (): List | undefined => {
+  getDefault: (userId?: string): List | undefined => {
     return db.prepare('SELECT * FROM lists WHERE is_default = 1').get() as List | undefined;
   }
 };
