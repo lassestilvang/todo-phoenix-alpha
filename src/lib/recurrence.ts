@@ -18,7 +18,7 @@ export class RecurrenceEngine {
 
   constructor() {
     // Daily - every day
-    this.patterns.set('every_day', (date: Date) => new Date(date);
+    this.patterns.set('every_day', (date: Date) => new Date(date));
 
     // Weekly - every week
     this.patterns.set('every_week', (date: Date) => {
@@ -62,3 +62,4 @@ export class RecurrenceEngine {
     }
     return { valid: true };
   }
+}
