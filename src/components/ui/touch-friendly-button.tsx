@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, useState, ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TouchFriendlyButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -241,20 +241,20 @@ export function SwipeableCard({
 export function useTouchFeedback() {
   const [activeElement, setActiveElement] = useState<HTMLElement | null>(null);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent<HTMLElement>) => {
     const target = e.currentTarget;
     target.style.transform = 'scale(0.98)';
     target.style.transition = 'transform 0.1s ease-out';
     setActiveElement(target);
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
     const target = e.currentTarget;
     target.style.transform = '';
     setActiveElement(null);
   };
 
-  const handleTouchCancel = (e: React.TouchEvent) => {
+  const handleTouchCancel = (e: React.TouchEvent<HTMLElement>) => {
     const target = e.currentTarget;
     target.style.transform = '';
     setActiveElement(null);
