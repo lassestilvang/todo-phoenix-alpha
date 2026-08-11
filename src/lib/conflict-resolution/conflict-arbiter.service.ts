@@ -1,4 +1,4 @@
-# Conflict Resolution Service
+// Conflict Resolution Service
 
 // Gateway for conflict resolution operations
 // Acts as a thin wrapper around the ConflictArbiterImpl
