@@ -1,10 +1,10 @@
 import db from '@/lib/db/schema';
-import { RecurrencePattern } from './types';
+import { RecurringPattern } from './types';
 
 export interface RecurringTask {
   id: number;
   taskId: number;
-  pattern: keyof typeof RecurrencePattern;
+  pattern: RecurringPattern;
   interval: number;
   intervalUnit: 'day' | 'week' | 'month' | 'year';
   nextRun: Date;
@@ -49,7 +49,9 @@ export class RecurrenceEngine {
    */
   getNextOccurrence(pattern: string, lastRun?: Date, interval?: number, unit?: 'day' | 'week' | 'month' | 'year'): Date | null {
     if (!this.patterns.has(pattern)) return null;
-    return this.patterns.get(pattern)(lastRun ?? new Date());
+    const patternFn = this.patterns.get(pattern);
+    if (!patternFn) return null;
+    return patternFn(lastRun ?? new Date());
   }
 
   /**
