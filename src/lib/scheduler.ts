@@ -3,13 +3,13 @@
  * Handles recurring tasks, delayed execution, and time-based workflows
  */
 
-import { useAgentOS } from '@/lib/agent-os';
+import { useAgentOS, AgentTask } from '@/lib/agent-os';
 import { usePriorityAgent } from '@/lib/priority-agent';
 import { useEnvironmentAgent } from '@/lib/environment-agent';
-import { useBackchannelAgent } from '@/lib/backchannel-agent';
+import { getBackchannelAgent } from '@/lib/backchannel-agent';
 import { getConflictArbiter } from '@/lib/conflict-arbiter';
 import { usePatternMiningService } from '@/lib/pattern-miner';
-import { Task } from '@/types/task';
+import { Task } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface ScheduledTask extends Task {
@@ -25,6 +25,7 @@ export interface ScheduledTask extends Task {
   expiresAt?: number; // Timestamp after which task should not be executed
   maxExecutions?: number; // Maximum number of times to execute (for recurring)
   executionCount?: number; // Track actual executions
+  createdAt?: number; // Timestamp when task was created/scheduled
 }
 
 export interface SchedulerState {
@@ -32,6 +33,8 @@ export interface SchedulerState {
   runningTasks: Map<string, ScheduledTask>;
   isRunning: boolean;
   timerId: NodeJS.Timeout | null;
+  scheduledTasksCount: number;
+  runningTasksCount: number;
 }
 
 export class TaskScheduler {
@@ -40,6 +43,8 @@ export class TaskScheduler {
     runningTasks: new Map(),
     isRunning: false,
     timerId: null,
+    scheduledTasksCount: 0,
+    runningTasksCount: 0,
   };
 
   private config = {
@@ -162,7 +167,7 @@ export class TaskScheduler {
             // One-time task - check if already executed
             return (
               !this.state.runningTasks.has(task.id) &&
-              task.executionCount < (task.maxExecutions || 1)
+              (task.executionCount || 0) < (task.maxExecutions || 1)
             );
           }
         }
@@ -187,6 +192,7 @@ export class TaskScheduler {
    * Check if a recurring task is due based on its pattern
    */
   private isRecurrenceDue(task: ScheduledTask, now: number): boolean {
+    if (!task.recurrence || !task.createdAt) return false;
     const date = new Date(now);
     const lastExecution = new Date(task.createdAt);
 
@@ -278,9 +284,9 @@ export class TaskScheduler {
   private async executeScheduledTask(task: ScheduledTask): Promise<void> {
     const agentOS = useAgentOS.getState();
     const priorityAgent = usePriorityAgent.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
     const environment = useEnvironmentAgent.getState();
-    const conflictArbiter = useConflictArbiter.getState();
+    const conflictArbiter = this.conflictArbiter;
 
     try {
       // Check if we have available agents for the required capabilities
@@ -295,17 +301,24 @@ export class TaskScheduler {
       }
 
       // Check for potential conflicts before assignment
-      const conflictCheck = await this.conflictArbiter.checkConflict(
-        { taskId: task.id, participants: availableAgents.map(a => a.id) }
+      const conflictId = this.conflictArbiter.reportConflict(
+        {
+          type: 'TASK_LOCK_CONTENTION',
+          participants: availableAgents.map(a => a.id),
+          description: 'Task scheduling conflict',
+          context: {
+            taskId: task.id,
+            timestamp: Date.now(),
+          },
+          priority: 5,
+          severity: 'low',
+        }
       );
 
-      if (conflictCheck.conflictDetected) {
+      if (conflictId) {
         // Resolve conflict or queue task for later
-        const resolution = await this.conflictArbiter.resolveConflict(
-          conflictCheck.conflictId!,
-          'consensus'
-        );
-        if (!resolution.success) {
+        const resolution = this.conflictArbiter.resolveConflict(conflictId, 'CONSENSUS');
+        if (!resolution) {
           // Conflict unresolved - reschedule for later
           this.rescheduleTask(task);
           return;
@@ -313,10 +326,11 @@ export class TaskScheduler {
       }
 
       // Select best agent based on priority and context
+      const currentContext = environment.getCurrentContext().context;
       const bestAgent = this.selectBestAgent(
         task,
         availableAgents,
-        environment.getCurrentContext()
+        currentContext
       );
 
       if (!bestAgent) {
@@ -332,7 +346,18 @@ export class TaskScheduler {
       this.state.scheduledTasks.set(task.id, task);
 
       // Execute the task via agent OS
-      const assignmentResult = agentOS.assignTask(task, bestAgent.id);
+      const agentTask: AgentTask = {
+        id: task.id,
+        description: task.description || '',
+        required_capabilities: task.required_capabilities || [],
+        priority: task.priority || 5,
+        deadline: task.deadline ? new Date(task.deadline) : undefined,
+        dependencies: [],
+        created_by: 'scheduler',
+        status: 'pending',
+        created_at: task.created_at || Date.now(),
+      };
+      const assignmentResult = agentOS.assignTask(agentTask, bestAgent.id);
       if (!assignmentResult.success) {
         // Failed to assign - reschedule
         this.state.runningTasks.delete(task.id);
@@ -352,7 +377,6 @@ export class TaskScheduler {
           executionCount: task.executionCount,
         },
         priority: task.priority,
-        timestamp: Date.now(),
       });
 
       // Set up completion handler (in real implementation, this would be event-driven)
@@ -387,7 +411,7 @@ export class TaskScheduler {
     success: boolean
   ): void {
     const agentOS = useAgentOS.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
     const task = this.state.runningTasks.get(taskId);
 
     if (!task) return;
@@ -399,9 +423,10 @@ export class TaskScheduler {
     const currentTask = this.state.scheduledTasks.get(taskId);
     if (currentTask) {
       // For recurring tasks, reschedule if not at max executions
+      const executionCount = currentTask.executionCount || 0;
       if (
         currentTask.maxExecutions === undefined ||
-        currentTask.executionCount < currentTask.maxExecutions
+        executionCount < currentTask.maxExecutions
       ) {
         // Reschedule for next occurrence
         this.rescheduleTask(currentTask);
@@ -424,17 +449,19 @@ export class TaskScheduler {
         executionCount: task.executionCount,
       },
       priority: success ? 3 : 6,
-      timestamp: Date.now(),
     });
 
     // Complete the task in agent OS
-    agentOS.completeTask(task.id, agentId, success);
+    agentOS.completeTask(task.id, agentId);
   }
 
   /**
    * Reschedule a task for its next occurrence
    */
   private rescheduleTask(task: ScheduledTask): void {
+    // Guard clause: only recurring tasks can be rescheduled
+    if (!task.recurrence) return;
+
     // Calculate next execution time based on recurrence
     const now = new Date();
     let nextExecution = new Date(now);
@@ -489,7 +516,7 @@ export class TaskScheduler {
    */
   private handleTaskError(task: ScheduledTask, error: Error): void {
     const agentOS = useAgentOS.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
 
     // Remove from running tasks
     this.state.runningTasks.delete(task.id);
@@ -505,7 +532,6 @@ export class TaskScheduler {
         executionCount: task.executionCount,
       },
       priority: 8, // High priority for errors
-      timestamp: Date.now(),
     });
 
     // For recurring tasks, we might want to reschedule despite error
