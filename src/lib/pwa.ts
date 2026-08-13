@@ -3,11 +3,11 @@
  * Provides service worker registration and offline capabilities
  */
 
-declare global {
-  interface Navigator {
-    serviceWorker: ServiceWorkerContainer;
-  }
-}
+// declare global {
+//   interface Navigator {
+//     serviceWorker: ServiceWorkerContainer;
+//   }
+// }
 
 /**
  * Register the service worker for PWA functionality
