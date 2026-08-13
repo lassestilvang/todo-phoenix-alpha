@@ -140,6 +140,7 @@ export interface TaskWithDetails extends Task {
   attachments: Attachment[];
   time_entries: TimeEntry[];
   changes: TaskChange[];
+  projects: Project[];
 }
 
 export interface SubtaskWithDetails extends Subtask {
