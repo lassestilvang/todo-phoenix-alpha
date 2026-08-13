@@ -1,5 +1,4 @@
 import { useRBAC } from './rbac';
-import { sha256 } from 'js-sha256';
 
 export class TwoFactorAuth {
   private readonly issuer = 'TodoPhoenix-Alpha';
