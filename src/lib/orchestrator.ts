@@ -11,10 +11,9 @@
 
 import { useAgentOS } from '@/lib/agent-os';
 import { usePriorityAgent } from '@/lib/priority-agent';
-import { useConflictArbiter } from '@/lib/conflict-arbiter';
-import { useBackchannelAgent } from '@/lib/backchannel-agent';
+import { getBackchannelAgent } from '@/lib/backchannel-agent';
 import { useEnvironmentAgent } from '@/lib/environment-agent';
-import { Task } from '@/types/task';
+import { AgentTask } from '@/lib/agent-os';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface OrchestratorConfig {
@@ -35,7 +34,7 @@ export class Orchestrator {
   private config: OrchestratorConfig;
   private isRunning: boolean = false;
   private processingInterval: NodeJS.Timeout | null = null;
-  private activeTasks: Map<string, { task: Task; agentId: string; startTime: number }> = new Map();
+  private activeTasks: Map<string, { task: AgentTask; agentId: string; startTime: number }> = new Map();
 
   constructor(config: Partial<OrchestratorConfig> = {}) {
     this.config = { ...defaultConfig, ...config };
@@ -110,7 +109,7 @@ export class Orchestrator {
   /**
    * Get pending tasks from the agent OS queue
    */
-  private getPendingTasks(): Task[] {
+  private getPendingTasks(): AgentTask[] {
     const agentOS = useAgentOS.getState();
     const pending = agentOS.global_queue.getPending();
     return pending;
@@ -119,7 +118,7 @@ export class Orchestrator {
   /**
    * Select the best agent for a given task based on capabilities, priority, and context
    */
-  private selectAgentForTask(task: Task): { agentId: string; agent: any } | null {
+  private selectAgentForTask(task: AgentTask): { agentId: string; agent: any } | null {
     // 1. Get available agents that match required capabilities
     const agentOS = useAgentOS.getState();
     const requiredCapabilities = task.required_capabilities || [];
@@ -136,7 +135,7 @@ export class Orchestrator {
     // 3. Score each agent based on suitability
     const scoredAgents = availableAgents.map(agent => {
       // Capability match score (all required capabilities must be present)
-      const capabilityScore = requiredCapabilities.every(cap =>
+      const capabilityScore = requiredCapabilities.every((cap: string) =>
         agent.capabilities[cap as keyof typeof agent.capabilities] === true
       ) ? 1.0 : 0;
 
@@ -167,22 +166,22 @@ export class Orchestrator {
   /**
    * Evaluate how well a task fits the current context
    */
-  private evaluateContextFit(task: Task, currentContext: string): number {
+  private evaluateContextFit(task: AgentTask, currentContext: string): number {
     // If task has no context requirements, it fits any context
-    if (!task.allowedContexts || task.allowedContexts.length === 0) {
+    if (!task.required_context || task.required_context.length === 0) {
       return 1.0;
     }
 
     // Check if current context is allowed for this task
-    return task.allowedContexts.includes(currentContext) ? 1.0 : 0.3;
+    return task.required_context.includes(currentContext) ? 1.0 : 0.3;
   }
 
   /**
    * Dispatch a task to an agent for execution
    */
-  private async dispatchTask(task: Task, agentId: string): Promise<void> {
+  private async dispatchTask(task: AgentTask, agentId: string): Promise<void> {
     const agentOS = useAgentOS.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
 
     try {
       // 1. Assign task to agent in AgentOS
@@ -210,7 +209,6 @@ export class Orchestrator {
           requiredCapabilities: task.required_capabilities,
         },
         priority: task.priority,
-        timestamp: Date.now(),
       });
 
       // 4. Set up timeout for this task
@@ -241,9 +239,9 @@ export class Orchestrator {
   /**
    * Handle a timed out task
    */
-  private handleTaskTimeout(task: Task, agentId: string): void {
+  private handleTaskTimeout(task: AgentTask, agentId: string): void {
     const agentOS = useAgentOS.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
 
     try {
       // 1. Release any locks held by this task
@@ -265,7 +263,6 @@ export class Orchestrator {
           reason: 'execution_timeout',
         },
         priority: 8, // High priority for timeout notifications
-        timestamp: Date.now(),
       });
 
       // 5. Remove from active tasks
@@ -280,7 +277,7 @@ export class Orchestrator {
    */
   completeTask(taskId: string, agentId: string, success: boolean, error?: string): void {
     const agentOS = useAgentOS.getState();
-    const backchannel = useBackchannelAgent();
+    const backchannel = getBackchannelAgent();
     const priorityAgent = usePriorityAgent.getState();
     const metrics = require('./metrics').metricsCollector;
 
@@ -310,13 +307,12 @@ export class Orchestrator {
         from: 'orchestrator',
         to: agentId,
         payload: {
-          taskId: task.id,
+          taskId: taskId,
           success,
           error: error || undefined,
           durationMs: Date.now() - (this.activeTasks.get(taskId)?.startTime || Date.now()),
         },
         priority: success ? 3 : 6, // Higher priority for failures
-        timestamp: Date.now(),
       });
 
       // 6. Remove from active tasks
