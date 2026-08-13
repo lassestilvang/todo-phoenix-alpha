@@ -18,11 +18,12 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  type: 'depends_on' | 'related_to' | 'similar_to' | 'blocks' | 'duplicate_of' | 'part_of' | 'references';
+  type: 'depends_on' | 'related_to' | 'similar_to' | 'blocks' | 'duplicate_of' | 'part_of' | 'references' | 'has_label';
   weight: number;
   confidence: number;
   properties: Record<string, any>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface KnowledgeGraphInsight {
@@ -106,7 +107,7 @@ export class KnowledgeGraph {
   }
 
   // Update existing task node
-  private updateTaskNode(nodeId: string, task: TaskWithDetails): void {
+  private async updateTaskNode(nodeId: string, task: TaskWithDetails): Promise<void> {
     const existing = this.nodes.get(nodeId);
     if (!existing) return;
 
@@ -145,7 +146,7 @@ export class KnowledgeGraph {
       task.name || '',
       task.description || '',
       task.priority || '',
-      task.deadline?.toISOString() || '',
+      task.deadline || '',
       (task.labels || []).map(l => l.name).join(' '),
       (task.projects || []).map(p => p.name).join(' '),
     ].join(' ');
@@ -723,5 +724,3 @@ export function getKnowledgeGraph(): KnowledgeGraph {
   }
   return knowledgeGraphInstance;
 }
-
-export type { KnowledgeGraphNode, KnowledgeGraphEdge, KnowledgeGraphInsight };
