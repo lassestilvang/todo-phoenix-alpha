@@ -1,4 +1,4 @@
-import db from './schema';
+import db from './db/schema';
 
 // Base integration interface
 export interface Integration {
@@ -13,6 +13,7 @@ export class WebhookIntegration implements Integration {
   name = 'webhook';
   enabled = true;
   description = 'Webhook integration for third-party services';
+  secret = 'webhook-secret-key';
 
   async validate(payload: any) {
     // Validate webhook payload structure
@@ -41,11 +42,11 @@ export const integrationRegistry = {
   webhook: new WebhookIntegration(),
   calendar: false, // To be implemented
   syncServer: false, // To be implemented
-  [otherIntegrations]: false // Placeholder for additional integrations
+  other: false // Placeholder for additional integrations
 };
 
 // Integration base class helper
-export class IntegrationBase {
+export abstract class IntegrationBase {
   abstract name: string;
   abstract enabled: boolean;
   abstract description: string;
@@ -76,8 +77,8 @@ export const loadIntegrations = async () => {
     // Dynamically load integration modules
     const integrationModules = require('./integrations').default;
     for (const [name, module] of Object.entries(integrationModules)) {
-      if (module instanceof Integration) {
-        integrations[name] = module;
+      if (typeof module === 'object' && module !== null && 'validate' in module && 'name' in module) {
+        integrations[name] = module as Integration;
       }
     }
   } catch (error) {
@@ -103,10 +104,11 @@ export const integrationLifecycle = {
         timestamp: new Date().toISOString()
       };
     } catch (error) {
-      console.error(`Integration validation failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Integration validation failed: ${errorMessage}`);
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
         timestamp: new Date().toISOString()
       };
     }
