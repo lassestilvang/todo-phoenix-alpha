@@ -30,7 +30,7 @@ export interface VoiceIntent {
 
 export class VoiceEngine {
   private recognition: any;
-  private synthesis: SpeechSynthesis;
+  private synthesis: SpeechSynthesis | null = null;
   private isListening = false;
   private confidenceThreshold = 0.7;
   private commandHistory: VoiceCommand[] = [];
@@ -56,8 +56,10 @@ export class VoiceEngine {
   }
 
   private initializeSpeechSynthesis() {
-    this.synthesis = window.speechSynthesis;
-    this.synthesis.cancel();
+    if (typeof window !== 'undefined') {
+      this.synthesis = window.speechSynthesis;
+      this.synthesis?.cancel();
+    }
   }
 
   private setupEventListeners() {
@@ -146,7 +148,7 @@ export class VoiceEngine {
     };
 
     // Enhanced parsing logic
-    const lowerTranscript = transcript.toLowerCase();n
+    const lowerTranscript = transcript.toLowerCase();
     if (lowerTranscript.includes('create') || lowerTranscript.includes('add') || lowerTranscript.includes('new')) {
       intent.action = 'create';
     } else if (lowerTranscript.includes('update') || lowerTranscript.includes('modify') || lowerTranscript.includes('change')) {
@@ -340,7 +342,7 @@ export class VoiceEngine {
 
   public dispose(): void {
     this.stopListening();
-    this.synthesis.cancel();
+    this.synthesis?.cancel();
   }
 }
 
@@ -353,5 +355,3 @@ export function getVoiceEngine(): VoiceEngine {
   }
   return voiceEngineInstance;
 }
-
-export type { VoiceCommand, VoiceIntent, VoiceEntities };
