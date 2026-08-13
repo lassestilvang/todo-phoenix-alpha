@@ -10,6 +10,7 @@
 
 import { create } from 'zustand';
 import { AgentCapabilityProfile, AgentWorkloadMetrics, AgentOSState } from './agent-os';
+import { useEnvironmentAgent } from '@/lib/environment-agent';
 
 // Priority scoring model
 export interface PriorityScore {
@@ -58,14 +59,26 @@ export interface TaskContext {
   estimated_energy?: number;
   user_energy_level?: number;
   user_focus_state?: 'deep_work' | 'interrupt_handling' | 'distracted' | 'creative';
+  last_updated?: number;
+}
+
+export interface LearningPattern {
+  scores: number[];
+  averageScore: number;
+}
+
+export interface EnergyPattern {
+  energy_scores: number[];
+  average: number;
 }
 
 export interface PriorityAgentState {
   scores: Map<string, PriorityScore>;
+  agents: Map<string, AgentCapabilityProfile>;
   config: PriorityAgentConfig;
   last_user_focus_change: number;
-  learning_patterns: Map<string, number>;
-  energy_patterns: Map<string, number>;
+  learning_patterns: Map<string, LearningPattern>;
+  energy_patterns: Map<string, EnergyPattern>;
   is_running: boolean;
   is_learning: boolean;
 }
@@ -94,6 +107,7 @@ const defaultConfig: PriorityAgentConfig = {
 // Priority Agent Store
 export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
   scores: new Map(),
+  agents: new Map(),
   config: defaultConfig,
   last_user_focus_change: Date.now(),
   learning_patterns: new Map(),
@@ -103,8 +117,12 @@ export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
 
   // Update or create a priority score for a task
   updateScore: (taskContext: TaskContext, userFocusState?: string) => {
-    const scoresMap = new Map(get().scores);
-    const userFocus = userFocusState || get().last_user_focus_change;
+    const state = get();
+    const scoresMap = new Map(state.scores);
+
+    // Get current environment context for focus matching
+    const environment = useEnvironmentAgent.getState();
+    const currentFocusState = userFocusState || environment.getCurrentContext().context || 'focus_mode';
 
     // Calculate component scores
     const urgencyScore = calculateUrgency(taskContext);
@@ -112,10 +130,11 @@ export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
     const deadlineScore = calculateDeadline(taskContext);
     const dependenciesScore = calculateDependencies(taskContext);
     const energyScore = calculateEnergy(taskContext);
-    const userFocusScore = calculateUserFocus(taskContext, userFocus);
+    const userFocusScore = calculateUserFocus(taskContext, currentFocusState);
 
     // Calculate decay factor (lower for older tasks)
-    const ageMinutes = (Date.now() - taskContext.last_updated) / 60000;
+    const lastUpdated = taskContext.last_updated || Date.now();
+    const ageMinutes = (Date.now() - lastUpdated) / 60000;
     const decayFactor = Math.max(0, 1 - ageMinutes * 0.001); // 0.1% decay per minute
 
     // Determine Eisenhower quadrant
@@ -152,10 +171,10 @@ export const usePriorityAgent = create<PriorityAgentState>((set, get) => ({
     scoresMap.set(taskContext.taskId, priorityScore);
 
     // Record learning patterns
-    updateLearningPattern(taskContext, overallScore);
-    updateEnergyPattern(taskContext, energyScore);
+    updateLearningPattern(state, taskContext, overallScore);
+    updateEnergyPattern(state, taskContext, energyScore);
 
-    set({ scores: scoresMap });
+    set({ scores: scoresMap, learning_patterns: state.learning_patterns, energy_patterns: state.energy_patterns });
     return priorityScore;
   },
 
@@ -268,7 +287,7 @@ function calculateEnergy(task: TaskContext): number {
   return Math.max(10, Math.min(100, 100 - (complexity * 5)));
 }
 
-function calculateUserFocus(task: TaskContext, userFocusState: number): number {
+function calculateUserFocus(task: TaskContext, userFocusState: string): number {
   if (task.user_focus_state === userFocusState) return 100;
   return 50; // Default middle score
 }
@@ -279,17 +298,15 @@ function isDeadlineUrgent(deadline: Date): boolean {
   return hoursUntilDeadline <= 4; // 4 hours or less is urgent
 }
 
-function updateLearningPattern(task: TaskContext, score: number): void {
-  const patterns = get().learning_patterns;
+function updateLearningPattern(state: PriorityAgentState, task: TaskContext, score: number): void {
+  const patterns = state.learning_patterns;
 
   // Track task patterns based on outcome
   if (!patterns.has(task.context_type)) {
-    patterns.set(task.context_type, {});
+    patterns.set(task.context_type, { scores: [], averageScore: 0 });
   }
 
-  const typePattern = patterns.get(task.context_type) || {};
-  if (!typePattern.scores) typePattern.scores = [];
-
+  const typePattern = patterns.get(task.context_type)!;
   typePattern.scores.push(score);
   if (typePattern.scores.length > 100) typePattern.scores = typePattern.scores.slice(-100);
 
@@ -299,21 +316,22 @@ function updateLearningPattern(task: TaskContext, score: number): void {
   patterns.set(task.context_type, typePattern);
 }
 
-function updateEnergyPattern(task: TaskContext, energyScore: number): void {
-  const patterns = get().energy_patterns;
+function updateEnergyPattern(state: PriorityAgentState, task: TaskContext, energyScore: number): void {
+  const patterns = state.energy_patterns;
+  const focusState = task.user_focus_state || 'default';
 
-  if (!patterns.has(task.user_focus_state || 'default')) {
-    patterns.set(task.user_focus_state || 'default', { energy_scores: [], average: 0 });
+  if (!patterns.has(focusState)) {
+    patterns.set(focusState, { energy_scores: [], average: 0 });
   }
 
-  const focusPattern = patterns.get(task.user_focus_state || 'default') || { energy_scores: [], average: 0 };
+  const focusPattern = patterns.get(focusState)!;
   focusPattern.energy_scores.push(energyScore);
 
   if (focusPattern.energy_scores.length > 100) focusPattern.energy_scores = focusPattern.energy_scores.slice(-100);
 
   focusPattern.average = focusPattern.energy_scores.reduce((a, b) => a + b, 0) / focusPattern.energy_scores.length;
 
-  patterns.set(task.user_focus_state || 'default', focusPattern);
+  patterns.set(focusState, focusPattern);
 }
 
 function getTask(taskId: string): TaskContext | null {
