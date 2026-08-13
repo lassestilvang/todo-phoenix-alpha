@@ -199,6 +199,7 @@ export function KnowledgeGraphVisualizer({ tasks, labels, projects }: KnowledgeG
               confidence: 1.0,
               properties: {},
               createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
             });
           });
         } catch (error) {
@@ -218,6 +219,7 @@ export function KnowledgeGraphVisualizer({ tasks, labels, projects }: KnowledgeG
             confidence: 0.9,
             properties: {},
             createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
         });
       }
@@ -234,6 +236,7 @@ export function KnowledgeGraphVisualizer({ tasks, labels, projects }: KnowledgeG
             confidence: 1.0,
             properties: {},
             createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
         });
       }
