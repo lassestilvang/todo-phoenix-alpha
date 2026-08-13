@@ -21,18 +21,19 @@ export class TaskParser {
     // Parse dates/times using chrono-node
     const parsed = parse(text, new Date(), {
       forwardDate: true,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezones: { UTC: 0 } as any,
     });
 
     // Extract date and deadline from parsed results
     if (parsed.length > 0) {
       // Find the best date match - prefer certain dates with values
-      let bestMatch: any = parsed[0];
-      for (const match of parsed) {
-        const currentCertain = match.start.isCertain('date');
-        const bestCertain = bestMatch.start.isCertain('date');
-        const currentHasValue = !!match.start.dateValue;
-        const bestHasValue = !!bestMatch.start.dateValue;
+      const parsedAny = parsed as any[];
+      let bestMatch: any = parsedAny[0];
+      for (const match of parsedAny) {
+        const currentCertain = match.start?.isCertain?.('date') || false;
+        const bestCertain = bestMatch.start?.isCertain?.('date') || false;
+        const currentHasValue = !!match.start?.dateValue;
+        const bestHasValue = !!bestMatch.start?.dateValue;
 
         // Priority: certain date with value > uncertain date with value > certain date > uncertain date
         if (currentHasValue && !bestHasValue) {
@@ -241,8 +242,8 @@ export class TaskParser {
 
     // Suggest name improvement for very generic names (3 chars or less, or common vague phrases)
     const genericNames = ['do something', 'task', 'todo', 'thing', 'stuff'];
-    const isGenericName = genericNames.includes(parsed.name.toLowerCase()) ||
-                          (parsed.name.length > 0 && parsed.name.length <= 3);
+    const isGenericName = parsed.name && genericNames.includes(parsed.name.toLowerCase()) ||
+                          (parsed.name && parsed.name.length > 0 && parsed.name.length <= 3);
 
     if (isGenericName) {
       suggestions.push('Consider making the task name more descriptive');
@@ -284,7 +285,7 @@ export class TaskParser {
     }
 
     // Verify the name is descriptive
-    if (parsed.name.length <= 3 || ['task', 'todo', 'item'].includes(parsed.name.toLowerCase())) {
+    if (!parsed.name || parsed.name.length <= 3 || ['task', 'todo', 'item'].includes(parsed.name.toLowerCase())) {
       suggestions.push('Make task name more specific and actionable');
     }
 
