@@ -21,12 +21,29 @@ export class PatternMiningService {
     for (const [key, tasks] of clusters) {
       const [_, hours, minutes, weeks] = key.split('_').map(s => s.replace(/[^\d]/g, ''))
       const interval = hours === minutes ? 1 : null
-      const type = interval ? 'hourly' : weeks > 1 ? 'monthly' : 'daily'
-      patterns.push({
+      const weeksNum = parseInt(weeks, 10) || 0
+      const type = interval ? 'hourly' : weeksNum > 1 ? 'monthly' : 'daily'
+      const getDescription = (type: string, interval: number): string => {
+  let unit: string;
+  if (type === 'hourly') {
+    unit = 'hour';
+  } else if (type === 'daily') {
+    unit = 'day';
+  } else if (type === 'weekly') {
+    unit = 'week';
+  } else if (type === 'monthly') {
+    unit = 'month';
+  } else {
+    unit = 'time';
+  }
+  return `Auto-pattern: ${type} every ${interval || 1} ${unit}`;
+};
+
+patterns.push({
         id: `p_${key}`,
         type: type as 'hourly' | 'daily' | 'weekly' | 'monthly',
         interval: interval || 1,
-        description: `Auto-pattern: ${type} every ${interval || 1} ${type === 'hourly' ? 'hour' : type === 'daily' ? 'day' : type === 'weekly' ? 'week' : 'month'}`
+        description: getDescription(type, interval || 1)
       });
     }
     return patterns
@@ -36,7 +53,7 @@ export class PatternMiningService {
     return clusterSize >= 3
   }
 }
-export type RecurringPatternType = ReturnType<PatternMiningService['extractPatternsFromClusters']['0']['type']>
+export type RecurringPatternType = (ReturnType<PatternMiningService['extractPatternsFromClusters']>)[0]['type']
 
 // Create singleton instance
 let patternMiningService: PatternMiningService | null = null;
