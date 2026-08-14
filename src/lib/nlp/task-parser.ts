@@ -120,10 +120,20 @@ export class TaskParser {
       }
     }
 
-    // Extract priority from text
+    // Extract priority from text - try multiple patterns
     const priorityMatch = text.toLowerCase().match(/\b(high|medium|low|none)\s+priority\b/);
     if (priorityMatch) {
       result.priority = priorityMatch[1] as Priority;
+    } else {
+      // Additional priority patterns
+      const urgencyMatch = text.toLowerCase().match(/\b(urgent|asap|immediately|high priority|high-priority)\b/);
+      if (urgencyMatch) {
+        result.priority = 'high';
+      } else if (text.toLowerCase().match(/\b(never|whenever|someday|low priority|low-priority)\b/)) {
+        result.priority = 'low';
+      } else if (text.toLowerCase().match(/\b(medium priority|medium-priority)\b/)) {
+        result.priority = 'medium';
+      }
     }
 
     // Extract time estimates (e.g., "2 hours", "30m", "1.5h")
