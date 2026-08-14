@@ -1,6 +1,34 @@
 // Vitest setup file
 import { vi } from 'vitest'
 
+// Polyfill localStorage for test environment
+let storageMap: Map<string, string> = new Map();
+
+const mockLocalStorage = {
+  getItem: (key: string) => storageMap.get(key) ?? null,
+  setItem: (key: string, value: string) => storageMap.set(key, value),
+  removeItem: (key: string) => storageMap.delete(key),
+  clear: () => storageMap.clear(),
+  key: (index: number) => {
+    const keys = Array.from(storageMap.keys());
+    return index >= 0 && index < keys.length ? keys[index] : null;
+  },
+  get length() {
+    return storageMap.size;
+  },
+};
+
+// Mock localStorage globally for all tests
+Object.defineProperty(globalThis, 'localStorage', {
+  value: mockLocalStorage,
+  writable: true,
+});
+
+// Helper function to reset localStorage
+function resetLocalStorage() {
+  storageMap.clear();
+}
+
 // Mock environment variables for tests
 const mockDb = {
   prepare: vi.fn().mockImplementation((sql) => {
