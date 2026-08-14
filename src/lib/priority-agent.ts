@@ -238,9 +238,9 @@ function calculateImportance(task: TaskContext): number {
   // Simple heuristic based on description length, tags complexity, and dependencies
   let score = 50;
 
-  if (task.description.length > 100) score += 20;
-  if (task.tags.length > 3) score += 15;
-  if (task.dependencies.length > 0) score += 25;
+  if (task.description?.length > 100) score += 20;
+  if ((task.tags?.length ?? 0) > 3) score += 15;
+  if ((task.dependencies?.length ?? 0) > 0) score += 25;
 
   // Adjust based on context type
   switch (task.context_type) {
@@ -273,7 +273,7 @@ function calculateDeadline(task: TaskContext): number {
 
 function calculateDependencies(task: TaskContext): number {
   // Blockers have high priority (100), tasks with fewer dependencies have lower priority
-  if (task.dependencies.length > 0) return 100; // Could be blocked
+  if ((task.dependencies?.length ?? 0) > 0) return 100; // Could be blocked
   return 30; // Independent tasks
 }
 
