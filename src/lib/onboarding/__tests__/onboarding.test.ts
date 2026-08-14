@@ -8,19 +8,15 @@ import {
   type OnboardingStep,
 } from '../types';
 
+// Helper to simulate browser environment - always true in test env since we mock
+const hasLocalStorage = () => true;
+
 describe('Onboarding System', () => {
   beforeEach(() => {
-    // Clear localStorage before each test
-    if (typeof window !== 'undefined') {
-      localStorage.clear();
-      vi.clearAllMocks();
-    }
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.clear();
-    }
   });
 
   describe('Onboarding Types and Constants', () => {
@@ -56,7 +52,7 @@ describe('Onboarding System', () => {
         skipped: false,
       };
 
-      if (typeof window !== 'undefined') {
+      if (hasLocalStorage()) {
         localStorage.setItem('todo-phoenix-onboarding', JSON.stringify(storedState));
       }
 
@@ -72,7 +68,7 @@ describe('Onboarding System', () => {
         completedAt: new Date().toISOString(),
       };
 
-      if (typeof window !== 'undefined') {
+      if (hasLocalStorage()) {
         localStorage.setItem('todo-phoenix-onboarding', JSON.stringify(completedState));
       }
 
@@ -87,7 +83,7 @@ describe('Onboarding System', () => {
         skipped: true,
       };
 
-      if (typeof window !== 'undefined') {
+      if (hasLocalStorage()) {
         localStorage.setItem('todo-phoenix-onboarding', JSON.stringify(skippedState));
       }
 
