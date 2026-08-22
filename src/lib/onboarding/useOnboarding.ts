@@ -52,13 +52,8 @@ export function useOnboarding(): OnboardingContextType {
   // Check if onboarding should be shown
   const shouldShowOnboarding = useCallback(() => {
     if (state.completedAt || state.skipped) return false;
-    // Don't show if user already has tasks (implied they know the app)
-    try {
-      const tasks = localStorage.getItem('todo-tasks');
-      if (tasks && JSON.parse(tasks).length > 0) return false;
-    } catch {
-      // Ignore parsing errors
-    }
+    // Show onboarding for new users who haven't completed or skipped it
+    // (Task data is in database, not localStorage, so we don't check for existing tasks here)
     return true;
   }, [state.completedAt, state.skipped]);
 
