@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getVoiceEngine } from '@/lib/voice/VoiceEngine';
 import { encryptionService } from '@/lib/security/encryption';
-import { listOperations } from '@/lib/db/lists';
-import { getTasks } from '@/app/actions/tasks';
+import { listOperations, taskOperations, reminderOperations } from '@/lib/db';
+import { db } from '@/lib/db/schema';
 
 export async function POST(request: Request) {
   try {
@@ -45,6 +45,12 @@ export async function POST(request: Request) {
       case 'set_reminder':
         return await handleReminder(command, userId);
 
+      case 'update_task':
+        return await handleUpdateTask(command, userId);
+
+      case 'delete_task':
+        return await handleDeleteTask(command, userId);
+
       default:
         return NextResponse.json(
           { error: `Command type '${command.type}' not yet implemented` },
@@ -61,70 +67,170 @@ export async function POST(request: Request) {
 }
 
 async function handleCreateTask(command: any, listId: string | undefined, userId: string) {
-  // Validate task data
-  async function validateTaskData(name: string, description: string, priority: string) {
-    return { valid: true, errors: [] as string[] };
-  }
-  const validationResult = await validateTaskData(
-    command.entities.taskName || 'Untitled Task',
-    command.entities.description,
-    command.entities.priority
-  );
-
-  if (!validationResult.valid) {
-    return NextResponse.json(
-      { error: validationResult.errors.join(', ') },
-      { status: 400 }
-    );
-  }
-
-  // Determine list ID
-  const defaultList = listOperations.getDefault();
-  const targetListId = listId || (defaultList ? defaultList.id : 1);
+  // Get default list or use provided
+  const lists = listOperations.getAll();
+  const defaultList = lists.length > 0 ? lists[0] : null;
+  const targetListId = parseInt(listId || (defaultList ? String(defaultList.id) : '1'), 10);
 
   // Create task data
   const taskData = {
-    name: command.entities.taskName,
+    name: command.entities.taskName || 'Untitled Task',
     description: command.entities.description || undefined,
     deadline: command.entities.deadline || undefined,
     priority: command.entities.priority || 'none',
     estimate_minutes: command.entities.duration || undefined,
-    list_id: Number(targetListId),
+    list_id: targetListId,
   };
 
-  // Create the task (would call actual API in production)
-  // For now, return success response
-  return NextResponse.json(
-    {
-      success: true,
-      message: `Task created: ${taskData.name}`,
-      task: taskData
-    }
-  );
+  // Create the task
+  const task = taskOperations.create(taskData);
+
+  return NextResponse.json({
+    success: true,
+    message: `Task created: ${taskData.name}`,
+    task: task
+  });
 }
 
 async function handleQueryTasks(command: any, userId: string) {
-  // Get tasks based on query
-  const tasks = await getTasks(); // Would filter based on command.entities.query
+  // Get tasks
+  const tasks = await getTasks();
 
   return NextResponse.json({
     success: true,
     tasks: tasks.map(t => ({
       id: t.id,
       name: t.name,
-      completed: t.is_completed
+      completed: t.is_completed,
+      priority: t.priority,
+      deadline: t.deadline
     })),
     count: tasks.length
   });
 }
 
 async function handleReminder(command: any, userId: string) {
-  // Set reminder logic
+  if (!command.entities.taskId) {
+    return NextResponse.json(
+      { error: 'Task ID required for reminder' },
+      { status: 400 }
+    );
+  }
+
+  const reminder = reminderOperations.create(
+    command.entities.taskId,
+    command.entities.reminderTime
+  );
+
   return NextResponse.json({
     success: true,
-    message: 'Reminder set successfully'
+    message: 'Reminder set successfully',
+    reminder: {
+      id: reminder.id,
+      time: reminder.time,
+      is_sent: reminder.is_sent
+    }
   });
 }
+
+async function handleUpdateTask(command: any, userId: string) {
+  if (!command.entities.taskId) {
+    return NextResponse.json(
+      { error: 'Task ID required for update' },
+      { status: 400 }
+    );
+  }
+
+  const updates: any = {};
+  if (command.entities.taskName) updates.name = command.entities.taskName;
+  if (command.entities.description) updates.description = command.entities.description;
+  if (command.entities.deadline) updates.deadline = command.entities.deadline;
+  if (command.entities.priority) updates.priority = command.entities.priority;
+  if (command.entities.duration !== undefined) updates.estimate_minutes = command.entities.duration;
+
+  const task = taskOperations.update(command.entities.taskId, updates);
+
+  return NextResponse.json({
+    success: true,
+    message: `Task updated: ${task.name}`,
+    task: task
+  });
+}
+
+async function handleDeleteTask(command: any, userId: string) {
+  if (!command.entities.taskId) {
+    return NextResponse.json(
+      { error: 'Task ID required for deletion' },
+      { status: 400 }
+    );
+  }
+
+  taskOperations.delete(command.entities.taskId);
+
+  return NextResponse.json({
+    success: true,
+    message: 'Task deleted successfully'
+  });
+}
+
+async function getTasks(): Promise<any[]> {
+  const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all();
+  return tasks;
+}
+
+function taskOperations: {
+  create: (data: any) => any;
+  update: (id: number, data: any) => any;
+  delete: (id: number) => void;
+}
+
+taskOperations = {
+  create: (data) => {
+    const result = db.prepare(`
+      INSERT INTO tasks (list_id, name, description, deadline, priority, estimate_minutes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      data.list_id,
+      data.name,
+      data.description || null,
+      data.deadline ? new Date(data.deadline).toISOString() : null,
+      data.priority || 'none',
+      data.estimate_minutes || 0
+    );
+    const id = Number(result.lastInsertRowid);
+    return { id, ...data };
+  },
+  update: (id, data) => {
+    const updates = Object.entries(data).filter(([_, v]) => v !== undefined);
+    if (updates.length === 0) return { id, ...data };
+
+    const setClause = updates.map(([k]) => `${k} = ?`).join(', ');
+    const values = updates.map(([_, v]) => typeof v === 'object' && !(v instanceof Date) ? JSON.stringify(v) : v);
+    values.push(id);
+
+    db.prepare(`UPDATE tasks SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values);
+    return { id, ...data };
+  },
+  delete: (id) => {
+    db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+  }
+};
+
+const reminderOperations = {
+  create: (taskId: number, time: Date) => {
+    const result = db.prepare(`
+      INSERT INTO reminders (task_id, time, is_sent)
+      VALUES (?, ?, 0)
+    `).run(taskId, time.toISOString());
+    const id = Number(result.lastInsertRowid);
+    return {
+      id,
+      task_id: taskId,
+      time: time.toISOString(),
+      is_sent: 0
+    };
+  }
+};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
