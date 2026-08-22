@@ -35,7 +35,6 @@ export interface AttachmentState {
 
   // Methods
   uploadAttachment: (taskId: string, file: File) => Promise<AttachmentUploadResult>;
-  determineFileType: (filename: string) => AttachmentType;
   getTaskAttachments: (taskId: string) => Attachment[];
   getAttachment: (attachmentId: string) => Attachment | null;
   createVersion: (attachmentId: string, newFile: File) => Promise<AttachmentUploadResult>;
@@ -47,7 +46,7 @@ export interface AttachmentState {
 /**
  * Determine file type from filename (standalone helper function)
  */
-function determineFileType(filename: string): AttachmentType {
+export function determineFileType(filename: string): AttachmentType {
   const extension = filename.toLowerCase().split('.').pop();
   switch (extension) {
     case 'jpg':
