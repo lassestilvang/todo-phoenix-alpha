@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+// Mock global document for keyboard shortcut tests
+const mockActiveElement = { tagName: 'BODY', isContentEditable: false }
+const mockDocument = {
+  activeElement: mockActiveElement,
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}
+global.document = mockDocument as any
+
 // Mock global keyboard events
 const mockEvent = {
   preventDefault: vi.fn(),
@@ -10,6 +19,13 @@ const mockEvent = {
   altKey: false,
   shiftKey: false,
 }
+
+// Helper to create proper keyboard event mock
+const createKeyEvent = (key: string, ctrlKey: boolean = false) => ({
+  ...mockEvent,
+  key,
+  ctrlKey,
+})
 
 describe('useKeyboardShortcuts Hook', () => {
   beforeEach(() => {
@@ -33,9 +49,6 @@ describe('useKeyboardShortcuts Hook', () => {
 
       // Mock shortcut handler function
       const shortcutHandler = vi.fn()
-
-      // Import after mocks are set up
-      import { useKeyboardShortcuts } from '@/lib/hooks/use-keyboard-shortcuts'
 
       // This would normally test the hook in isolation, but we'll test the logic directly
       // Simulate Ctrl+N press
@@ -63,8 +76,8 @@ describe('useKeyboardShortcuts Hook', () => {
       expect(canCloseDialog).toBe(true)
     })
 
+    // Mock input field
     it('should skip shortcuts when typing in input fields', () => {
-      // Mock input field
       const mockInput = { tagName: 'INPUT' } as any
       Object.defineProperty(document, 'activeElement', {
         get: () => mockInput,
@@ -77,14 +90,15 @@ describe('useKeyboardShortcuts Hook', () => {
                           (document.activeElement as any)?.isContentEditable
 
       // Should skip Ctrl+N when in input field
-      const isCtrlN = mockEvent.ctrlKey && mockEvent.key === 'n'
+      const event = createKeyEvent('n', true)
+      const isCtrlN = event.ctrlKey && event.key === 'n'
       const shouldSkip = isInputField && isCtrlN
       expect(shouldSkip).toBe(true)
     })
 
     it('should allow Ctrl+N when not in input field', () => {
       // Mock no input field (body)
-      const mockBody = { tagName: 'BODY' } as any
+      const mockBody = { tagName: 'BODY', isContentEditable: false } as any
       Object.defineProperty(document, 'activeElement', {
         get: () => mockBody,
         configurable: true,
@@ -112,8 +126,10 @@ describe('useKeyboardShortcuts Hook', () => {
                           document.activeElement?.tagName === 'TEXTAREA' ||
                           (document.activeElement as any)?.isContentEditable
 
+      const escapeEvent = { ...mockEvent, key: 'Escape' }
+
       // Escape should work even in input fields for closing dialogs
-      const canUseEscape = event.key === 'Escape' || !isInputField
+      const canUseEscape = escapeEvent.key === 'Escape' || !isInputField
       expect(canUseEscape).toBe(true)
     })
   })
