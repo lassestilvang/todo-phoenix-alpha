@@ -201,19 +201,17 @@ export const timeEntryOperations = {
     ).all('pending') as TimeEntry[];
   },
 
-  // Payroll integration mock
+  // Payroll integration mock - simplified to remove non-existent users table
   getPayrollData: (startDate: string, endDate: string): any[] => {
     return db.prepare(`
       SELECT
         t.id as task_id,
         t.name as task_name,
-        SUM(te.duration_minutes) as total_minutes,
-        u.email as assigned_to
+        SUM(te.duration_minutes) as total_minutes
       FROM time_entries te
       JOIN tasks t ON te.task_id = t.id
-      LEFT JOIN users u ON t.list_id = u.id  -- simplified join
       WHERE date(te.started_at) >= date(?) AND date(te.started_at) <= date(?)
-      GROUP BY te.task_id, u.email
+      GROUP BY te.task_id
       ORDER BY total_minutes DESC
     `).all(startDate, endDate);
   }
