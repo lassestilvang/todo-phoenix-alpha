@@ -321,23 +321,138 @@ export class VoiceEngine {
   }
 
   private async handleUpdateTaskCommand(command: VoiceCommand): Promise<void> {
-    // Implementation for updating tasks
-    this.speak('Task update functionality is being developed');
+    try {
+      if (!command.entities.taskId) {
+        this.speak('I need to know which task to update. Please specify the task.');
+        return;
+      }
+
+      const taskId = command.entities.taskId;
+      const updates: any = {};
+
+      if (command.entities.taskName) {
+        updates.name = command.entities.taskName;
+      }
+      if (command.entities.description) {
+        updates.description = command.entities.description;
+      }
+      if (command.entities.deadline) {
+        updates.deadline = command.entities.deadline;
+      }
+      if (command.entities.priority) {
+        updates.priority = command.entities.priority;
+      }
+      if (command.entities.duration !== undefined) {
+        updates.estimate_minutes = command.entities.duration;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        this.speak('I don\'t know what to update. Please specify what you want to change.');
+        return;
+      }
+
+      // Make API call to update task
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+
+      if (response.ok) {
+        const task = await response.json();
+        this.speak(`Updated task: ${task.name}`);
+      } else {
+        throw new Error('Failed to update task');
+      }
+    } catch (error) {
+      console.error('Error updating task:', error);
+      this.speak('Sorry, I was unable to update that task. Please try again.');
+    }
   }
 
   private async handleDeleteTaskCommand(command: VoiceCommand): Promise<void> {
-    // Implementation for deleting tasks
-    this.speak('Task deletion functionality is being developed');
+    try {
+      if (!command.entities.taskId) {
+        this.speak('I need to know which task to delete. Please specify the task.');
+        return;
+      }
+
+      const taskId = command.entities.taskId;
+
+      // Make API call to delete task
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        this.speak('Task deleted successfully');
+      } else {
+        throw new Error('Failed to delete task');
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      this.speak('Sorry, I was unable to delete that task. Please try again.');
+    }
   }
 
   private async handleQueryTasksCommand(command: VoiceCommand): Promise<void> {
-    // Implementation for querying tasks
-    this.speak('Task query functionality is being developed');
+    try {
+      // Make API call to get tasks
+      const response = await fetch('/api/tasks', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const tasks = await response.json();
+
+        if (tasks.length === 0) {
+          this.speak('You have no tasks.');
+        } else {
+          // Build a summary of tasks
+          const taskNames = tasks.map((t: any) => t.name).slice(0, 5);
+          const summary = `You have ${tasks.length} tasks. ${tasks.length > 5 ? `Here are some: ${taskNames.join(', ')}` : ''}`;
+          this.speak(summary);
+        }
+      } else {
+        throw new Error('Failed to fetch tasks');
+      }
+    } catch (error) {
+      console.error('Error querying tasks:', error);
+      this.speak('Sorry, I was unable to fetch your tasks. Please try again.');
+    }
   }
 
   private async handleReminderCommand(command: VoiceCommand): Promise<void> {
-    // Implementation for setting reminders
-    this.speak('Reminder functionality is being developed');
+    try {
+      if (!command.entities.reminderTime) {
+        this.speak('I need a time for the reminder. Please specify when you want to be reminded.');
+        return;
+      }
+
+      // Make API call to create reminder
+      const taskId = command.entities.taskId || 0;
+
+      const response = await fetch('/api/reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId,
+          reminderTime: command.entities.reminderTime.toISOString(),
+        }),
+      });
+
+      if (response.ok) {
+        const reminder = await response.json();
+        const formattedTime = new Date(reminder.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        this.speak(`Reminder set for ${formattedTime}`);
+      } else {
+        throw new Error('Failed to create reminder');
+      }
+    } catch (error) {
+      console.error('Error setting reminder:', error);
+      this.speak('Sorry, I was unable to set that reminder. Please try again.');
+    }
   }
 
   public dispose(): void {
