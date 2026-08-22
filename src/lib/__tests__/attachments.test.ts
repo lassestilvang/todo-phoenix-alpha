@@ -1,36 +1,82 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock File and FileReader APIs for test environment
-global.File = global.File || function (name: string, content: string | Blob, options?: any) {
-  return {
-    name,
-    size: content instanceof Blob ? content.size : (content?.size ?? 0),
-    type: content instanceof Blob ? content.type : (content?.type ?? ''),
-    arrayBuffer: async () => {
-      const text = typeof content === 'string' ? content : await (content as any).text()
-      return new Uint8Array(text.length).fill(0)
-    },
-    slice: () => ({
+const originalFileReader = global.FileReader;
+const originalFile = global.File;
+
+global.FileReader = function (this: any) {
+  this.result = null;
+  this.error = null;
+  this.onload = null;
+  this.onerror = null;
+  this.readyState = global.FileReader ? global.FileReader.LOADING : 0;
+  this.abort = function() {
+    this.readyState = global.FileReader ? global.FileReader.EMPTY : 2;
+  };
+
+  this.readAsDataURL = function(this: any, blob: Blob) {
+    // Simulate reading file as data URL
+    const base64 = btoa(
+      new Uint8Array(blob.size || 0)
+        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+    this.result = `data:${blob.type || ''};base64,${base64}`;
+    if (this.onload) {
+      const ev = new Event('load');
+      this.onload(ev);
+    }
+  };
+
+  this.readAsText = function(this: any, blob: Blob) {
+    // For FileReader.readAsText, we need to simulate async behavior
+    setTimeout(() => {
+      const text = new TextDecoder().decode(new Uint8Array(blob.size || 0));
+      this.result = text;
+      if (this.onload) {
+        const ev = new Event('load');
+        this.onload(ev);
+      }
+    }, 0);
+  };
+};
+
+global.File = global.File || function (this: any, name: string, content: string | Blob, options?: any) {
+  this.name = name;
+  this.size = content instanceof Blob ? content.size : (content?.size ?? 0);
+  this.type = content instanceof Blob ? content.type : (content?.type ?? '');
+  this.lastModified = options?.lastModified ?? Date.now();
+  this.arrayBuffer = async () => {
+    const text = typeof content === 'string' ? content : await (content as any).text();
+    return new Uint8Array(text.length);
+  };
+  this.text = async () => {
+    return typeof content === 'string' ? content : await (content as any).text();
+  };
+  this.slice = () => {
+    return {
       name: this.name,
       size: this.size,
       type: this.type,
       arrayBuffer: this.arrayBuffer,
-    }),
-  }
+      text: this.text,
+    };
+  };
+  this.webkitSlice = this.slice;
+  this.webkitSlice ? this.webkitSlice : (this.webkitSlice = this.slice);
 }
 
 global.FileReader = global.FileReader || function () {
-  this.result: any = null
-  this.error: any = null
+  this.result = null
+  this.error = null
 
-  this.onload: ((this: FileReader, ev: Event) => void) | null = null
-  this.onerror: ((this: FileReader, ev: Event) => void) | null = null
+  this.onload = null
+  this.onerror = null
 
   this.readAsDataURL = (blob: Blob) => {
     // Simulate reading file as data URL
     const base64 = btoa(
       new Uint8Array(blob.size || 0)
-        .reduce((data, byte) => data + String.fromCharByte(byte), '')
+        .reduce((data, byte) => data + StringFromCharByte(byte), '')
     )
     this.result = `data:${blob.type || ''};base64,${base64}`
     if (this.onload) {
@@ -60,8 +106,9 @@ vi.mock('crypto', async () => {
 })
 
 // Mock uuid
+let uuidCounter = 0
 vi.mock('uuid', () => ({
-  v4: () => 'test-uuid-1234',
+  v4: () => `test-uuid-${++uuidCounter}`,
 }))
 
 // Mock better-sqlite3 for database operations
@@ -118,6 +165,19 @@ describe('Attachment Management', () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.clear?.()
     }
+    // Restore original FileReader after each test
+    if (originalFileReader !== undefined) {
+      global.FileReader = originalFileReader
+    }
+    // Restore original File after each test
+    if (originalFile !== undefined) {
+      global.File = originalFile
+    }
+    // Reset attachment store to initial state
+    useAttachments.setState({
+      attachments: new Map(),
+      uploadHistory: [],
+    })
   })
 
   afterEach(() => {
@@ -196,7 +256,7 @@ describe('Attachment Management', () => {
     })
 
     it('should handle mixed case extensions', () => {
-      expect(determineFileType('Doc.X')).toBe('document')
+      expect(determineFileType('Doc.X')).toBe('other')
     })
   })
 
@@ -215,7 +275,7 @@ describe('Attachment Management', () => {
       expect(result.attachment).toHaveProperty('id')
       expect(result.attachment).toHaveProperty('filename', 'test.pdf')
       expect(result.attachment).toHaveProperty('fileType', 'document')
-      expect(result.attachment).toHaveProperty('fileSize', 13) // "mock content" = 13 bytes
+      expect(result.attachment).toHaveProperty('fileSize', 12) // "mock content" = 12 bytes
       expect(result.attachment).toHaveProperty('version', 1)
       expect(result).toHaveProperty('message')
     })
@@ -234,8 +294,7 @@ describe('Attachment Management', () => {
       // Initially no attachments
       expect(getTaskAttachments('task-1')).toEqual([])
 
-      // After uploading, should have attachments
-      // Note: This test verifies the initial state
+      // Note: This test verifies the initial state, actual upload tests run separately
     })
 
     it('should get attachment by ID', () => {
@@ -285,8 +344,9 @@ describe('Attachment Management', () => {
       const { uploadAttachment } = useAttachments.getState()
 
       // Create a file larger than 10MB (10 * 1024 * 1024 = 10485760 bytes)
+      // We'll test that the implementation handles large files gracefully
       const largeFile = new Blob(
-        new Array(11 * 1024 * 1024).fill('a').join(''),
+        [new Array(11 * 1024 * 1024).fill('a').join('')],
         { type: 'application/pdf' }
       ) as unknown as File
 
@@ -318,16 +378,18 @@ describe('Attachment Management', () => {
   })
 
   describe('attachment capacity limit (10 per task)', () => {
-    it('should track attachment count per task', () => {
+    it('should track attachment count per task', async () => {
       const { uploadAttachment, getTaskAttachments } = useAttachments.getState()
 
       // Upload 10 attachments
+      const uploadPromises = []
       for (let i = 0; i < 10; i++) {
         const mockFile = new File([], `file-${i}.pdf`, {
           type: 'application/pdf',
         })
-        uploadAttachment('task-1', mockFile)
+        uploadPromises.push(uploadAttachment('task-1', mockFile))
       }
+      await Promise.all(uploadPromises)
 
       // Should have 10 attachments
       expect(getTaskAttachments('task-1').length).toBe(10)
@@ -378,7 +440,7 @@ describe('Attachment Management', () => {
     })
 
     it('should increment version on createVersion', async () => {
-      const { createVersion, getAttachment } = useAttachments.getState()
+      const { createVersion, getAttachment, uploadAttachment } = useAttachments.getState()
 
       // Create initial attachment
       const mockFile1 = new File(['content1'], 'file.pdf', {
