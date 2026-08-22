@@ -8,7 +8,13 @@ if (typeof window === 'undefined') {
     const Database = require('better-sqlite3');
     dbPath = path.join(process.cwd(), 'data', 'planner.db');
     db = new Database(dbPath);
+    // Performance pragmas
     db.pragma('foreign_keys = ON');
+    db.pragma('journal_mode = WAL'); // Write-Ahead Logging for better concurrency
+    db.pragma('cache_size = -64000'); // 64MB cache
+    db.pragma('synchronous = NORMAL'); // Balance between safety and performance
+    db.pragma('temp_store = MEMORY'); // Store temporary tables in memory
+    db.pragma('mmap_size = 268435456'); // 256MB memory-mapped I/O
   } catch (error) {
     console.warn('Database binding not available, using in-memory fallback for build');
     // Fallback for build process when native bindings are unavailable
@@ -279,6 +285,47 @@ const migrationTable = db.prepare(`
 `);
 
 migrationTable.run();
+
+// Create users table for authentication and payroll
+const usersTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    role TEXT DEFAULT 'user' CHECK(role IN ('admin', 'manager', 'user', 'guest')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+usersTable.run();
+
+// Create external_integrations table for third-party API connections
+const externalIntegrationsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS external_integrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER,
+    provider TEXT NOT NULL CHECK(provider IN ('google_calendar', 'slack', 'email', 'webhook')),
+    external_id TEXT NOT NULL,
+    sync_status TEXT DEFAULT 'pending' CHECK(sync_status IN ('pending', 'syncing', 'completed', 'failed')),
+    last_synced_at DATETIME,
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  );
+`);
+externalIntegrationsTable.run();
+
+// Create indexes for new tables
+const createExternalIntegrationsIndexes = () => {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_external_integrations_task_id ON external_integrations(task_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_external_integrations_provider ON external_integrations(provider)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_external_integrations_sync_status ON external_integrations(sync_status)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_external_integrations_external_id ON external_integrations(external_id)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)').run();
+};
+createExternalIntegrationsIndexes();
 
 // Create default migration record if none exists
 const migrationExists = db.prepare('SELECT id FROM migrations WHERE version = "1.0.0"').get();
