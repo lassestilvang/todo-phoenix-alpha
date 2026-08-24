@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Calendar, Clock, Tag, AlertCircle, Save, Repeat,
-  Paperclip as IconPaperclip, X as IconX
+  Paperclip as IconPaperclip, X as IconX, Upload, Loader2, CheckCircle2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -15,17 +15,17 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label as UILabel } from "@/components/ui/label"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
-import { 
-  Popover, 
-  PopoverContent, 
-  PopoverTrigger 
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
 } from "@/components/ui/popover"
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +34,8 @@ import { Slider } from "@/components/ui/slider"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { format } from "date-fns"
 import type { TaskFormData, Priority, RecurringPattern, List, Label } from "@/lib/types"
+import { addAttachmentToTask } from "@/app/actions/tasks"
+import { toast } from "sonner"
 
 const taskSchema = z.object({
   name: z.string().min(1, "Task name is required"),
@@ -71,6 +73,33 @@ interface TaskFormDialogProps {
   mode: "create" | "edit"
 }
 
+// Helper function to get file type from filename
+function getFileType(filename: string): string {
+  const extension = filename.toLowerCase().split('.').pop()
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+      return 'image'
+    case 'pdf':
+    case 'doc':
+    case 'docx':
+    case 'txt':
+      return 'document'
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return 'spreadsheet'
+    case 'ppt':
+    case 'pptx':
+      return 'presentation'
+    default:
+      return 'other'
+  }
+}
+
 export function TaskFormDialog({
   open,
   onClose,
@@ -84,6 +113,13 @@ export function TaskFormDialog({
   const [showRecurringOptions, setShowRecurringOptions] = useState(false)
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>(task?.attachments || [])
   const [showReminderOptions, setShowReminderOptions] = useState(false)
+
+  // File upload state
+  const [fileUploadOpen, setFileUploadOpen] = useState(false)
+  const [selectedFilenames, setSelectedFilenames] = useState<string[]>([])
+  const [newFilenames, setNewFilenames] = useState<string[]>([])
+  const [fileDataMap, setFileDataMap] = useState<Map<string, string>>(new Map())
+  const [isUploading, setIsUploading] = useState(false)
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -111,17 +147,9 @@ export function TaskFormDialog({
     }
   }, [task, form, lists])
 
-  const handleSubmit = (data: TaskFormData) => {
-    onSave({ ...data, label_ids: selectedLabels })
-    onClose()
-    form.reset()
-    setSelectedLabels([])
-    setShowRecurringOptions(false)
-  }
-
   const toggleLabel = (labelId: number) => {
-    setSelectedLabels(prev => 
-      prev.includes(labelId) 
+    setSelectedLabels(prev =>
+      prev.includes(labelId)
         ? prev.filter(id => id !== labelId)
         : [...prev, labelId]
     )
@@ -131,6 +159,100 @@ export function TaskFormDialog({
     form.setValue("estimate_minutes", value[0])
   }
 
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files || []
+    if (files.length === 0) {
+      setFileUploadOpen(false)
+      return
+    }
+
+    const validFiles: File[] = []
+    const rejectedFiles: string[] = []
+
+    for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        rejectedFiles.push(file.name)
+        toast.error(`${file.name} exceeds 10MB limit`)
+        continue
+      }
+      validFiles.push(file)
+    }
+
+    if (validFiles.length > 0) {
+      // All files valid - read as data URLs and store
+      const readerPromises = validFiles.map(file => new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (event) => resolve(event.target?.result as string)
+        reader.readAsDataURL(file)
+      }))
+
+      Promise.all(readerPromises).then(dataUrls => {
+        validFiles.forEach((file, i) => {
+          setSelectedFilenames(prev => [...prev, file.name])
+          setFileDataMap(prev => {
+            const newMap = new Map(prev)
+            newMap.set(file.name, dataUrls[i])
+            return newMap
+          })
+          setNewFilenames(prev => [...prev, file.name])
+        })
+        setFileUploadOpen(false)
+      })
+    } else if (rejectedFiles.length > 0 && validFiles.length === 0) {
+      setFileUploadOpen(false)
+    }
+  }
+
+  // Upload selected files to backend
+  const handleUploadFiles = async () => {
+    if (selectedFilenames.length === 0 || fileDataMap.size === 0) return
+
+    setIsUploading(true)
+
+    const listId = form.getValues('list_id') || 1
+    const uploadPromises = selectedFilenames.map(async (filename) => {
+      const fileData = fileDataMap.get(filename) || ''
+      try {
+        const result = await addAttachmentToTask(
+          listId,
+          filename,
+          getFileType(filename),
+          fileData
+        )
+        setSelectedAttachments(prev => [...prev, result.filename])
+        return result.filename
+      } catch (error) {
+        console.error(`Failed to upload ${filename}:`, error)
+        toast.error(`Failed to upload ${filename}`)
+        return null
+      }
+    })
+
+    const uploadedFilenames = (await Promise.all(uploadPromises)).filter((f: string | null): f is string => f !== null)
+
+    setSelectedFilenames([])
+    setFileDataMap(new Map())
+    setNewFilenames([])
+
+    if (uploadedFilenames.length > 0) {
+      toast.success(`${uploadedFilenames.length} file(s) attached successfully`)
+    }
+  }
+
+  const handleSubmit = async (data: TaskFormData) => {
+    // Files are uploaded in handleUploadFiles, so we just submit the form
+    onSave({ ...data, label_ids: selectedLabels })
+    onClose()
+    form.reset()
+    setSelectedLabels([])
+    setShowRecurringOptions(false)
+    setSelectedAttachments([])
+    setSelectedFilenames([])
+    setFileDataMap(new Map())
+    setNewFilenames([])
+  }
+
   // eslint-disable-next-line react-hooks/incompatible-library
   const estimateMinutes = form.watch("estimate_minutes") || 0
   const hours = Math.floor(estimateMinutes / 60)
@@ -138,7 +260,12 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className={cn(
+          "max-w-2xl max-h-[90vh] overflow-y-auto",
+          isUploading && "cursor-wait"
+        )}
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === "create" ? "Create New Task" : "Edit Task"}
@@ -330,9 +457,7 @@ export function TaskFormDialog({
                       render={({ field }) => (
                         <Select
                           value={field.value}
-                          onValueChange={(value: RecurringPattern) => 
-                            field.onChange(value)
-                          }
+                          onValueChange={(value: RecurringPattern) => field.onChange(value)}
                         >
                           <SelectTrigger className="mt-1">
                             <SelectValue />
@@ -537,58 +662,109 @@ export function TaskFormDialog({
             </h3>
 
             <div className="space-y-3">
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
                 <UILabel>Attach files</UILabel>
-                <Button variant="outline" size="sm" onClick={() => {
-                  // Trigger file input click
-                  const input = document.createElement('input')
-                  input.type = 'file'
-                  input.multiple = true
-                  input.onchange = (e: any) => {
-                    if (e.target && (e.target as HTMLInputElement).files) {
-                      const files = Array.from((e.target as HTMLInputElement).files || [])
-                      if (files.length > 0) {
-                        const fileNames = files.map(f => f.name)
-                        setSelectedAttachments(prev => [...prev, ...fileNames])
-                        // Note: Actual file upload would happen separately
-                        // For now we just store filenames
-                      }
-                    }
-                  }
-                  input.click()
-                }}>
-                  Upload Files
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFileUploadOpen(true)}
+                  disabled={isUploading || selectedFilenames.length >= 10 - selectedAttachments.length}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Files
+                    </>
+                  )}
                 </Button>
               </div>
 
-              {selectedAttachments.length > 0 && (
-                <div className="mt-2">
-                  <div className="flex flex-wrap gap-2">
-                    {selectedAttachments.map((filename, index) => (
-                      <Badge
-                        key={`${filename}-${index}`}
-                        variant="outline"
-                        className="flex items-center gap-1"
-                      >
-                        <IconPaperclip className="h-3 w-3 mr-1" />
-                        <span className="text-xs">{filename}</span>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => {
-                            setSelectedAttachments(prev => prev.filter((_, i) => i !== index))
-                          }}
-                        >
-                          <IconX className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))}
+              {/* File upload trigger */}
+              {fileUploadOpen && (
+                <>
+                  <Input
+                    type="file"
+                    multiple
+                    className="absolute inset-0 opacity-0 cursor-pointer z-50"
+                    onChange={handleFileSelect}
+                    ref={(input) => {
+                      if (input) {
+                        input.focus()
+                      }
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Max 10 attachments per task, files under 10MB each
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Note: File upload implementation requires backend integration
-                  </p>
+                </>
+              )}
+
+              {/* Display selected filenames */}
+              {selectedFilenames.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedFilenames.map((filename, index) => (
+                    <Badge
+                      key={`${filename}-${index}`}
+                      variant="outline"
+                      className="flex items-center gap-1"
+                    >
+                      <IconPaperclip className="h-3 w-3 mr-1" />
+                      <span className="text-xs">{filename}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedFilenames(prev => prev.filter((_, i) => i !== index));
+                          setFileDataMap(prev => {
+                            const newMap = new Map(prev);
+                            newMap.delete(filename);
+                            return newMap;
+                          });
+                          setNewFilenames(prev => prev.filter(fn => fn !== filename));
+                        }}
+                      >
+                        <IconX className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                  <Button
+                    size="sm"
+                    onClick={handleUploadFiles}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>Add Attachments</>
+                    )}
+                  </Button>
                 </div>
               )}
+
+              {/* Upload button for already-uploaded files */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUploadFiles}
+                disabled={isUploading || selectedFilenames.length === 0}
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  "Upload Selected Files"
+                )}
+              </Button>
             </div>
           </div>
 
@@ -625,9 +801,18 @@ export function TaskFormDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">
-              <Save className="h-4 w-4 mr-2" />
-              {mode === "create" ? "Create Task" : "Save Changes"}
+            <Button type="submit" disabled={isUploading}>
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {mode === "create" ? "Create Task" : "Save Changes"}
+                </>
+              )}
             </Button>
           </div>
         </form>
