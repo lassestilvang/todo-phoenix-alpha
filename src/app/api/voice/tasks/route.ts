@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getVoiceEngine } from '@/lib/voice/VoiceEngine';
 import { encryptionService } from '@/lib/security/encryption';
 import { listOperations, taskOperations, reminderOperations } from '@/lib/db';
-import { db } from '@/lib/db/schema';
+import db from '@/lib/db/schema';
 
 export async function POST(request: Request) {
   try {
@@ -177,60 +177,6 @@ async function getTasks(): Promise<any[]> {
   const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all();
   return tasks;
 }
-
-function taskOperations: {
-  create: (data: any) => any;
-  update: (id: number, data: any) => any;
-  delete: (id: number) => void;
-}
-
-taskOperations = {
-  create: (data) => {
-    const result = db.prepare(`
-      INSERT INTO tasks (list_id, name, description, deadline, priority, estimate_minutes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(
-      data.list_id,
-      data.name,
-      data.description || null,
-      data.deadline ? new Date(data.deadline).toISOString() : null,
-      data.priority || 'none',
-      data.estimate_minutes || 0
-    );
-    const id = Number(result.lastInsertRowid);
-    return { id, ...data };
-  },
-  update: (id, data) => {
-    const updates = Object.entries(data).filter(([_, v]) => v !== undefined);
-    if (updates.length === 0) return { id, ...data };
-
-    const setClause = updates.map(([k]) => `${k} = ?`).join(', ');
-    const values = updates.map(([_, v]) => typeof v === 'object' && !(v instanceof Date) ? JSON.stringify(v) : v);
-    values.push(id);
-
-    db.prepare(`UPDATE tasks SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values);
-    return { id, ...data };
-  },
-  delete: (id) => {
-    db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-  }
-};
-
-const reminderOperations = {
-  create: (taskId: number, time: Date) => {
-    const result = db.prepare(`
-      INSERT INTO reminders (task_id, time, is_sent)
-      VALUES (?, ?, 0)
-    `).run(taskId, time.toISOString());
-    const id = Number(result.lastInsertRowid);
-    return {
-      id,
-      task_id: taskId,
-      time: time.toISOString(),
-      is_sent: 0
-    };
-  }
-};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
