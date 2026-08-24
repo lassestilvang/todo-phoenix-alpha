@@ -2,11 +2,16 @@
 let db: any;
 let dbPath: string | undefined;
 
+/* @ts-ignore - fs and path are Node.js built-ins not available in browser */
+const fs = typeof window === 'undefined' ? require('fs') : null;
+/* @ts-ignore - fs and path are Node.js built-ins not available in browser */
+const path = typeof window === 'undefined' ? require('path') : null;
+
 if (typeof window === 'undefined') {
   // Server-side only - use synchronous require for reliable initialization
   try {
     const Database = require('better-sqlite3');
-    dbPath = path.join(process.cwd(), 'data', 'planner.db');
+    dbPath = path!.join(process.cwd(), 'data', 'planner.db');
     db = new Database(dbPath);
     // Performance pragmas
     db.pragma('foreign_keys = ON');
@@ -18,16 +23,14 @@ if (typeof window === 'undefined') {
   } catch (error) {
     console.warn('Database binding not available, using in-memory fallback for build');
     // Fallback for build process when native bindings are unavailable
-    const fs = require('fs');
-    const p = require('path');
-    const dataPath = p.join(process.cwd(), 'data');
-    if (!fs.existsSync(dataPath)) {
-      fs.mkdirSync(dataPath, { recursive: true });
+    const dataPath = path!.join(process.cwd(), 'data');
+    if (!fs!.existsSync(dataPath)) {
+      fs!.mkdirSync(dataPath, { recursive: true });
     }
-    dbPath = p.join(dataPath, 'planner.db');
+    dbPath = path!.join(dataPath, 'planner.db');
     // Create empty db file for build process
-    if (!fs.existsSync(dbPath)) {
-      fs.writeFileSync(dbPath, '');
+    if (!fs!.existsSync(dbPath)) {
+      fs!.writeFileSync(dbPath, '');
     }
     db = {
       dbPath,
@@ -480,8 +483,9 @@ const createNewIndexes = () => {
   db.prepare('CREATE INDEX IF NOT EXISTS idx_subtasks_task_completed ON subtasks(task_id, is_completed)').run();
   db.prepare('CREATE INDEX IF NOT EXISTS idx_time_entries_task_started ON time_entries(task_id, started_at)').run();
   db.prepare('CREATE INDEX IF NOT EXISTS idx_reminders_time_sent ON reminders(time, is_sent)').run();
-};
+}
 
 createNewIndexes();
+}
 
 export default db;
