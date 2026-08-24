@@ -1,436 +1,526 @@
-'use client';
+"use client"
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from "react"
+import { cn } from "@/lib/utils"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
+  Card, CardContent, CardHeader, CardTitle, CardDescription
+} from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import {
-  TrendingUp,
-  Clock,
-  Target,
-  BarChart3,
-  PieChart,
-  Activity,
-  Users,
-  CheckCircle,
-  AlertCircle,
-  Calendar,
-  Star,
-  Brain,
-} from 'lucide-react';
+  TrendingUp, Clock, Target, CheckCircle, AlertCircle,
+  Calendar, Star, Brain, BarChart2, PieChart, Activity,
+  RefreshCw, Zap, Timer, List, Lightbulb, ArrowUpRight, Loader2
+} from "lucide-react"
+import { generatePredictions } from "@/lib/services/predictive-scheduling-service"
 
-interface Task {
-  id: number;
-  name: string;
-  priority: 'high' | 'medium' | 'low' | 'none';
-  is_completed: number;
-  estimate_minutes?: number;
-  actual_minutes?: number;
-  deadline?: Date;
-  created_at: Date;
+interface TaskPrediction {
+  id: number
+  name: string
+  predictedDuration: number
+  completionProbability: number
+  recommendedSchedule: {
+    startDate: string
+    startTime: string
+    confidence: number
+  } | null
+  priority: 'high' | 'medium' | 'low' | 'none'
+  deadline?: Date
+  estimate_minutes?: number
+  list_name?: string
+  list_color?: string
+}
+
+interface ProductiveWindows {
+  mostProductiveHours: number[]
+  peakFocusHours: number[]
+  recommendedWorkDuration: number
+}
+
+interface SchedulingSuggestion {
+  task: any
+  suggestion: string
+  priority: 'high' | 'medium' | 'low'
+  predictedStart: string | null
+}
+
+interface PredictionSummary {
+  totalTasks: number
+  highRiskTasks: number
+  mediumRiskTasks: number
+  lowRiskTasks: number
 }
 
 interface AnalyticsDashboardProps {
-  tasks: Task[];
-  labels?: { id: number; name: string; color: string }[];
-  projects?: { id: number; name: string }[];
+  tasks: any[]
+  timeEntries: any[]
+  selectedTimeframe: '7d' | '30d' | '90d'
+  onTimeframeChange: (tf: '7d' | '30d' | '90d') => void
 }
 
-export function AnalyticsDashboard({ tasks, labels, projects }: AnalyticsDashboardProps) {
-  const [timeframe, setTimeframe] = useState<'day' | 'week' | 'month'>('week');
-  const [stats, setStats] = useState<any>(null);
+export function AnalyticsDashboard({
+  tasks,
+  timeEntries,
+  selectedTimeframe,
+  onTimeframeChange,
+}: AnalyticsDashboardProps) {
+  const [predictions, setPredictions] = useState<TaskPrediction[]>([])
+  const [productiveWindows, setProductiveWindows] = useState<ProductiveWindows | null>(null)
+  const [schedulingSuggestions, setSchedulingSuggestions] = useState<SchedulingSuggestion[]>([])
+  const [summary, setSummary] = useState<PredictionSummary>({
+    totalTasks: 0,
+    highRiskTasks: 0,
+    mediumRiskTasks: 0,
+    lowRiskTasks: 0
+  })
+  const [isLoadingPredictions, setIsLoadingPredictions] = useState(false)
 
   useEffect(() => {
-    const computedStats = computeAnalytics(tasks, labels, projects, timeframe);
-    setStats(computedStats);
-  }, [tasks, labels, projects, timeframe]);
+    // Only load predictions when tasks and timeEntries are available
+    if (tasks && timeEntries) {
+      ;(async () => {
+        setIsLoadingPredictions(true)
+        try {
+          const result = await generatePredictions(selectedTimeframe)
+          setPredictions(result.predictions)
+          setProductiveWindows(result.productiveWindows)
+          setSchedulingSuggestions(result.schedulingSuggestions)
+          setSummary(result.summary)
+        } catch (error) {
+          console.error('Error loading predictions:', error)
+          toast.error('Failed to load predictive scheduling insights')
+        } finally {
+          setIsLoadingPredictions(false)
+        }
+      })()
+    }
+  }, [tasks, timeEntries, selectedTimeframe])
+
+  // Memoized functions for sorting and formatting
+  const timeframe = selectedTimeframe
+
+  const handleTimeframeChange = (tf: '7d' | '30d' | '90d') => {
+    onTimeframeChange(tf)
+    setPredictions([])
+    setProductiveWindows(null)
+    setSchedulingSuggestions([])
+    setSummary({ totalTasks: 0, highRiskTasks: 0, mediumRiskTasks: 0, lowRiskTasks: 0 })
+  }
+
+  // Format time estimate for display
+  const formatEstimate = (minutes?: number) => {
+    if (!minutes) return "0m"
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
+  }
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+    return new Date(dateString).toLocaleDateString(undefined, options)
+  }
+
+  // Format time for display
+  const formatTime = (timeString: string) => {
+    return new Date(`1970-01-01T${timeString}`).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // Get priority color class
+  const getPriorityClass = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'border-left-4 border-red-500 bg-red-50'
+      case 'medium': return 'border-left-4 border-yellow-500 bg-yellow-50'
+      case 'low': return 'border-left-4 border-green-500 bg-green-50'
+      default: return 'border-left-4 border-gray-500 bg-gray-50'
+    }
+  }
+
+  // Get priority badge variant
+  const getPriorityVariant = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'destructive'
+      case 'medium': return 'default' // Use 'default' instead of 'warning' (not in Badge variants)
+      case 'low': return 'secondary'
+      default: return 'secondary'
+    }
+  }
+
+  // Sort predictions based on selected criteria
+  const sortedPredictions = [...predictions].sort((a, b) => {
+    // Default sort by completion probability (lowest first = highest risk)
+    return a.completionProbability - b.completionProbability
+  })
 
   return (
-    <div className="analytics-dashboard space-y-6">
-      {/* Header with Timeframe Selector */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Analytics Dashboard</h2>
-          <p className="text-muted-foreground mt-1">
-            Get insights into your productivity patterns and task performance
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between pb-4 border-b">
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold">
+            <Brain className="mr-2 h-5 w-5" />
+            Analytics Dashboard
+          </h2>
+          <p className="text-muted-foreground">
+            Comprehensive analytics with predictive scheduling insights
           </p>
         </div>
-
-        <div className="flex gap-2">
-          {(['day', 'week', 'month'] as const).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setTimeframe(tf)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                timeframe === tf
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+        <div className="flex flex-col lg:flex-row lg:space-x-4 mt-4 lg:mt-0">
+          <div className="flex space-x-2">
+            {(['7d', '30d', '90d'] as const).map((tf) => (
+              <Button
+                key={tf}
+                variant={timeframe === tf ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleTimeframeChange(tf)}
+              >
+                {tf === '7d' ? 'Last 7 Days' : tf === '30d' ? 'Last 30 Days' : 'Last 90 Days'}
+              </Button>
+            ))}
+          </div>
+          <div className="flex space-x-2 mt-4 lg:mt-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPredictions([])}
+              className="hidden sm:inline"
             >
-              {tf.charAt(0).toUpperCase() + tf.slice(1)}
-            </button>
-          ))}
+              Reset
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Completion Rate"
-          value={stats?.completionRate ?? 0}
-          unit="%"
-          icon={CheckCircle}
-          color="green"
-          change={stats?.completionChange}
-        />
+      {/* Summary Stats */}
+      {summary.totalTasks > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <MetricCard
+            title="Total Pending Tasks"
+            value={summary.totalTasks}
+            icon={List}
+            color="blue"
+          />
+          <MetricCard
+            title="High Risk Tasks"
+            value={summary.highRiskTasks}
+            unit="tasks"
+            icon={AlertCircle}
+            color="red"
+          />
+          <MetricCard
+            title="Medium Risk Tasks"
+            value={summary.mediumRiskTasks}
+            unit="tasks"
+            icon={Timer}
+            color="amber"
+          />
+          <MetricCard
+            title="Low Risk Tasks"
+            value={summary.lowRiskTasks}
+            unit="tasks"
+            icon={CheckCircle}
+            color="green"
+          />
+        </div>
+      )}
 
-        <MetricCard
-          title="Active Tasks"
-          value={stats?.activeTasks ?? 0}
-          icon={Activity}
-          color="blue"
-        />
-
-        <MetricCard
-          title="Avg. Time/Task"
-          value={stats?.avgTimePerTask?.toFixed(0) ?? 0}
-          unit="min"
-          icon={Clock}
-          color="amber"
-        />
-
-        <MetricCard
-          title="Overdue Tasks"
-          value={stats?.overdueTasks ?? 0}
-          icon={AlertCircle}
-          color="red"
-          change={stats?.overdueChange}
-        />
-      </div>
-
-      {/* Priority Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
+      {/* Productive Windows */}
+      {productiveWindows && (
+        <Card className="border">
+          <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5 text-amber-500" />
-              Priority Distribution
+              <Clock className="h-5 w-5" />
+              Optimal Work Windows
             </CardTitle>
             <CardDescription>
-              How your tasks are distributed by priority
+              Based on your historical productivity patterns
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {(['high', 'medium', 'low', 'none'] as const).map((priority) => {
-                const count = stats?.priorityDistribution?.[priority] || 0;
-                const total = stats?.totalTasks || 1;
-                const percentage = (count / total) * 100;
-
-                return (
-                  <div key={priority} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="capitalize flex items-center gap-1">
-                        {priority === 'high' && '⚡'}
-                        {priority === 'medium' && '🔶'}
-                        {priority === 'low' && '🟢'}
-                        {priority === 'none' && '⚪'}
-                        {priority}
-                      </span>
-                      <span>{count} ({percentage.toFixed(1)}%)</span>
-                    </div>
-                    <Progress value={percentage} className="h-2" />
-                  </div>
-                );
-              })}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-3">
+                <h4 className="font-medium">Most Productive Hours</h4>
+                <div className="flex flex-wrap gap-2">
+                  {productiveWindows.mostProductiveHours.map((hour) => (
+                    <Badge key={hour} variant="secondary" className="text-xs px-3 py-1">
+                      {hour}:00 - {hour + 1}:00
+                    </Badge>
+                  ))}
+                </div>
+                {productiveWindows.mostProductiveHours.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Insufficient data</p>
+                )}
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-medium">Peak Focus Hours</h4>
+                <div className="flex flex-wrap gap-2">
+                  {productiveWindows.peakFocusHours.map((hour) => (
+                    <Badge key={hour} variant="default" className="text-xs px-3 py-1">
+                      {hour}:00 - {hour + 1}:00
+                    </Badge>
+                  ))}
+                </div>
+                {productiveWindows.peakFocusHours.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Insufficient data</p>
+                )}
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-medium">Recommended Session Length</h4>
+                <p className="text-2xl font-bold">
+                  {productiveWindows.recommendedWorkDuration} minutes
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Based on your average focused work sessions
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
+      )}
 
-        {/* Label Trend Analysis */}
-        <Card>
-          <CardHeader>
+      {/* Task Predictions */}
+      {predictions && predictions.length > 0 && (
+        <Card className="border">
+          <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-purple-500" />
-              AI Insights
+              <TrendingUp className="h-5 w-5" />
+              Task Completion Predictions
             </CardTitle>
             <CardDescription>
-              Smart suggestions based on your task patterns
+              AI predictions for pending tasks based on historical patterns
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {stats?.insights?.map((insight: any, index: number) => (
-                <div key={index} className="p-3 bg-muted/30 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="p-1 bg-primary/10 rounded-full">
-                      <TrendingUp className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-sm">{insight.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {insight.description}
-                      </p>
-                      {insight.suggestedAction && (
-                        <div className="mt-2 p-2 bg-primary/5 rounded border-l-2 border-primary">
-                          <p className="text-xs font-medium text-primary">
-                            💡 {insight.suggestedAction}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              {sortedPredictions.slice(0, 8).map((prediction) => (
+                <PredictionCard
+                  key={prediction.id}
+                  prediction={prediction}
+                  formatEstimate={formatEstimate}
+                  formatDate={formatDate}
+                  formatTime={formatTime}
+                  getPriorityClass={getPriorityClass}
+                  getPriorityVariant={getPriorityVariant}
+                />
               ))}
-
-              {!stats?.insights && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Brain className="h-8 w-8 mx-auto mb-2" />
-                  <p>No insights available yet</p>
+              {sortedPredictions.length > 8 && (
+                <div className="text-center py-4">
+                  <Button variant="outline" size="sm" className="w-full">
+                    View all {sortedPredictions.length} predictions
+                  </Button>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Scheduling Suggestions */}
+      {schedulingSuggestions && schedulingSuggestions.length > 0 && (
+        <Card className="border">
+          <CardHeader className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Scheduling Recommendations
+            </CardTitle>
+            <CardDescription>
+              AI-generated suggestions to improve your task scheduling
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {schedulingSuggestions.slice(0, 6).map((suggestion) => (
+                <SuggestionCard
+                  key={suggestion.task.id}
+                  suggestion={suggestion}
+                  formatEstimate={formatEstimate}
+                  getPriorityClass={getPriorityClass}
+                  getPriorityVariant={getPriorityVariant}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Action Button */}
+      <div className="flex justify-center">
+        <Button
+          disabled={isLoadingPredictions}
+          className="flex items-center gap-2"
+        >
+          {isLoadingPredictions ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Predictions
+            </>
+          )}
+        </Button>
       </div>
-
-      {/* Timeline Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Task Completion Timeline
-          </CardTitle>
-          <CardDescription>
-            Tasks completed over time
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64">
-            {stats?.timeline ? (
-              <div className="relative h-full">
-                <div className="absolute inset-0 flex items-end justify-between gap-2">
-                  {stats.timeline.map((point: any, index: number) => (
-                    <div key={index} className="flex-1 flex flex-col items-center">
-                      <div className="bg-primary rounded-t transition-all duration-300 hover:scale-115">
-                        <div className="h-20 w-8 bg-primary rounded-t" style={{ height: `${point.count * 20}px` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground mt-2">
-                        {point.date}
-                      </span>
-                      <span className="text-xs font-medium mt-1">
-                        {point.count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <p>No data available for this timeframe</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
-  );
+  )
 }
 
-interface MetricCardProps {
-  title: string;
-  value: number | string;
-  unit?: string;
-  icon: any;
-  color: 'green' | 'blue' | 'amber' | 'red';
-  change?: number | string;
-}
-
-function MetricCard({ title, value, unit, icon: Icon, color, change }: MetricCardProps) {
+// Metric Card Component
+function MetricCard({
+  title, value, unit, icon: Icon, color
+}: {
+  title: string
+  value: number
+  unit?: string
+  icon: any
+  color: 'green' | 'blue' | 'amber' | 'red'
+}) {
   const colorClasses = {
     green: 'text-green-600',
     blue: 'text-blue-600',
     amber: 'text-amber-600',
     red: 'text-red-600',
-  };
-
-  const bgColor = {
-    green: 'bg-green-50',
-    blue: 'bg-blue-50',
-    amber: 'bg-amber-50',
-    red: 'bg-red-50',
-  };
+  }
 
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <div className={`p-2 rounded-full ${bgColor[color]}`}>
+        <div className="p-2 rounded-full bg-muted">
           <Icon className={`h-4 w-4 ${colorClasses[color]}`} />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-foreground">
+        <div className="text-2xl font-bold">
           {typeof value === 'number' ? value.toLocaleString() : value}
-          {unit && (
-            <span className="text-sm font-normal text-muted-foreground">
-              {unit}
-            </span>
-          )}
+          {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
         </div>
-        {change !== undefined && (
-          <div className="text-xs text-muted-foreground mt-1">
-            <TrendingUp className="inline h-3 w-3 mr-1" />
-            {change}
-          </div>
-        )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
-// Compute analytics from tasks
-function computeAnalytics(
-  tasks: Task[],
-  labels?: { id: number; name: string; color: string }[],
-  projects?: { id: number; name: string }[],
-  timeframe: string = 'week'
-) {
-  const now = new Date();
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.is_completed).length;
-  const activeTasks = totalTasks - completedTasks;
+// Prediction Card Component
+function PredictionCard({
+  prediction,
+  formatEstimate,
+  formatDate,
+  formatTime,
+  getPriorityClass,
+  getPriorityVariant
+}: {
+  prediction: any
+  formatEstimate: (minutes?: number) => string
+  formatDate: (dateString: string) => string
+  formatTime: (timeString: string) => string
+  getPriorityClass: (priority: string) => string
+  getPriorityVariant: (priority: string) => 'default' | 'secondary' | 'destructive' | 'outline'
+}) {
+  return (
+    <div className={`${getPriorityClass(prediction.priority)} p-4 rounded-lg border hover:bg-opacity-75 transition-colors cursor-pointer`}>      <div className="flex flex-col space-y-3">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <h4 className="font-medium">{prediction.name}</h4>
+            <p className="text-sm text-muted-foreground truncate">
+              {prediction.estimate_minutes ? `Estimate: ${formatEstimate(prediction.estimate_minutes)}` : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={getPriorityVariant(prediction.priority)}>
+              {prediction.priority.charAt(0).toUpperCase() + prediction.priority.slice(1)}
+            </Badge>
+            <Badge variant="secondary">
+              {Math.round(prediction.completionProbability * 100)}%
+            </Badge>
+          </div>
+        </div>
 
-  // Completion rate
-  const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="font-medium">Predicted Duration:</p>
+            <p className="text-muted-foreground">{formatEstimate(prediction.predictedDuration)}</p>
+          </div>
+          <div>
+            <p className="font-medium">Completion Probability:</p>
+            <p className="text-muted-foreground">
+              {Math.round(prediction.completionProbability * 100)}%
+            </p>
+          </div>
+          {prediction.recommendedSchedule ? (
+            <>
+              <div>
+                <p className="font-medium">Recommended Start:</p>
+                <p className="text-muted-foreground">
+                  {formatDate(prediction.recommendedSchedule.startDate)} at {formatTime(prediction.recommendedSchedule.startTime)}
+                </p>
+              </div>
+              <div>
+                <p className="font-medium">Confidence:</p>
+                <p className="text-muted-foreground">
+                  {Math.round(prediction.recommendedSchedule.confidence * 100)}%
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="col-span-2">
+              <p className="font-medium">No Schedule Recommendation:</p>
+              <p className="text-muted-foreground">Consider setting a deadline for better predictions</p>
+            </div>
+          )}
+        </div>
 
-  // Overdue tasks
-  const overdueTasks = tasks.filter(t =>
-    t.deadline && new Date(t.deadline) < now && !t.is_completed
-  ).length;
-
-  // Task duration analysis
-  const tasksWithDuration = tasks.filter(t => t.estimate_minutes && t.actual_minutes);
-  const avgTimePerTask = tasksWithDuration.length > 0
-    ? tasksWithDuration.reduce((sum, t) => sum + (t.actual_minutes || 0), 0) / tasksWithDuration.length
-    : 0;
-
-  // Priority distribution
-  const priorityDistribution = {
-    high: tasks.filter(t => t.priority === 'high').length,
-    medium: tasks.filter(t => t.priority === 'medium').length,
-    low: tasks.filter(t => t.priority === 'low').length,
-    none: tasks.filter(t => t.priority === 'none').length,
-  };
-
-  // Timeline data
-  const timeline = generateTimeline(tasks, timeframe);
-
-  // AI Insights (simplified)
-  const insights = generateInsights(tasks, labels, projects);
-
-  // Change metrics
-  const previousPeriodTasks = tasks.filter(t => {
-    const created = new Date(t.created_at);
-    const daysAgo = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-    const periodThreshold = timeframe === 'day' ? 7 : timeframe === 'week' ? 30 : 90;
-    return daysAgo <= periodThreshold;
-  });
-
-  const completionChange = previousPeriodTasks.length > 0
-    ? ((previousPeriodTasks.filter(t => t.is_completed).length / previousPeriodTasks.length) - completionRate / 100) * 100
-    : 0;
-
-  return {
-    totalTasks,
-    completedTasks,
-    activeTasks,
-    completionRate,
-    overdueTasks,
-    avgTimePerTask,
-    priorityDistribution,
-    timeline,
-    insights,
-    completionChange,
-    overdueChange: overdueTasks > 0 ? `+${overdueTasks} overdue` : 'No overdue tasks',
-  };
+        {prediction.deadline && (
+          <div className="mt-3 p-3 bg-muted/50 rounded">
+            <p className="font-medium">Deadline:</p>
+            <p className="text-sm font-semibold">
+              {formatDate(prediction.deadline.toISOString())}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
-function generateTimeline(tasks: Task[], timeframe: string) {
-  const now = new Date();
-  const days = timeframe === 'day' ? 7 : timeframe === 'week' ? 30 : 90;
-  const timeline = [];
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-
-    const completedOnDay = tasks.filter(t => {
-      if (!t.is_completed) return false;
-      const completedDate = new Date(t.created_at);
-      const taskDay = completedDate.toISOString().split('T')[0];
-      return taskDay === dateStr;
-    }).length;
-
-    timeline.push({
-      date: date.toLocaleDateString('en', { weekday: 'short' }),
-      count: completedOnDay,
-    });
-  }
-
-  return timeline;
+// Suggestion Card Component
+function SuggestionCard({
+  suggestion,
+  formatEstimate,
+  getPriorityClass,
+  getPriorityVariant
+}: {
+  suggestion: any
+  formatEstimate: (minutes?: number) => string
+  getPriorityClass: (priority: string) => string
+  getPriorityVariant: (priority: string) => 'default' | 'destructive' | 'outline' | 'secondary'
+}) {
+  return (
+    <div className="p-4 rounded-lg border hover:bg-muted/50 transition-colors">
+      <div className="flex justify-between items-start mb-2">
+        <h4 className="font-medium">{suggestion.task.name}</h4>
+        <Badge variant={getPriorityVariant(suggestion.priority)}>
+          {suggestion.priority.charAt(0).toUpperCase() + suggestion.priority.slice(1)}
+        </Badge>
+      </div>
+      <p className="text-sm text-muted-foreground mb-3">
+        {suggestion.suggestion}
+      </p>
+      {suggestion.predictedStart && (
+        <div className="flex items-center gap-2 text-sm">
+          <Clock className="h-3 w-3" />
+          <span className="text-muted-foreground">
+            Suggested start: {new Date(suggestion.predictedStart).toLocaleString()}
+          </span>
+        </div>
+      )}
+    </div>
+  )
 }
-
-function generateInsights(tasks: Task[], labels?: any[], projects?: any[]): any[] {
-  const insights = [];
-
-  // Pattern: Tasks often created together
-  const labelPatterns: Record<string, number> = {};
-  tasks.forEach(task => {
-    // This would be enhanced with actual label data
-  });
-
-  // Pattern: Time estimation accuracy
-  const accurateEstimates = tasks.filter(t =>
-    t.estimate_minutes && t.actual_minutes &&
-    Math.abs((t.actual_minutes || 0) - (t.estimate_minutes || 0)) < (t.estimate_minutes || 1) * 0.2
-  ).length;
-
-  if (tasks.length > 0) {
-    const accuracy = (accurateEstimates / tasks.length) * 100;
-    if (accuracy > 80) {
-      insights.push({
-        title: 'Excellent Estimation Accuracy',
-        description: `You estimated time accurately ${accuracy.toFixed(0)}% of the time`,
-        suggestedAction: 'Keep using your current estimation technique',
-        confidence: accuracy / 100,
-      });
-    } else if (accuracy < 50) {
-      insights.push({
-        title: 'Estimation Improvement Needed',
-        description: 'Your time estimates are often inaccurate',
-        suggestedAction: 'Break down larger tasks and track time more carefully',
-        confidence: 0.8,
-      });
-    }
-  }
-
-  // Bottlenecks: Tasks blocking many others
-  const dependencyMap: Record<number, number> = {};
-  tasks.forEach(task => {
-    // Would check actual dependencies
-  });
-
-  return insights;
-}
-
-export default AnalyticsDashboard;
