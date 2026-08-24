@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { useAgentOS } from '@/lib/agent-os';
+import { AgentOSState, useAgentOS } from '@/lib/agent-os';
 import { getBackchannelAgent } from '@/lib/backchannel-agent';
 
 function createAgentDiscoveryCommand(capabilities: string[]): string {
-  // Create a simple discovery command string based on capabilities
   return `DISCOVER:${capabilities.join(',')}:${Date.now()}`;
 }
 
@@ -11,14 +10,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
 
-  // Use type assertion since AgentOSState methods are not fully typed in the type system
   const agentOS = useAgentOS.getState();
 
   switch (action) {
     case 'register':
       try {
         const body = await request.json();
-        const agentId = (useAgentOS as any).registerAgent(body);
+        const agentId = agentOS.registerAgent(body);
 
         return NextResponse.json({
           success: true,
@@ -36,8 +34,14 @@ export async function GET(request: Request) {
     case 'status':
       try {
         const agentId = searchParams.get('agentId');
-        const agent = (useAgentOS as any).getAgent(agentId);
-        const context = (useAgentOS as any).getContext(agentId);
+        if (!agentId) {
+          return NextResponse.json(
+            { success: false, error: 'Agent ID is required' },
+            { status: 400 }
+          );
+        }
+        const agent = agentOS.getAgent(agentId);
+        const context = agentOS.getContext(agentId);
 
         return NextResponse.json({
           success: true,
@@ -55,16 +59,16 @@ export async function GET(request: Request) {
       try {
         const capabilities = searchParams.get('capabilities');
         const capArray = capabilities ? capabilities.split(',') : [];
-        const available = (useAgentOS as any).getAvailableAgents(capArray);
+        const available = agentOS.getAvailableAgents(capArray);
 
         return NextResponse.json({
           success: true,
           available_agents: available.length,
-          agents: available.map((a: any) => ({
-            id: (a as any).id,
-            name: (a as any).name,
-            capabilities: (a as any).capabilities,
-            availability_score: (a as any).availability_score,
+          agents: available.map((a) => ({
+            id: a.id,
+            name: a.name,
+            capabilities: a.capabilities,
+            availability_score: a.availability_score,
           })),
         });
       } catch (error) {
@@ -79,7 +83,7 @@ export async function GET(request: Request) {
         const body = await request.json();
         const { task, agentId } = body;
 
-        const result = (useAgentOS as any).assignTask(task, agentId);
+        const result = agentOS.assignTask(task, agentId);
 
         return NextResponse.json({
           success: result.success,
@@ -98,7 +102,7 @@ export async function GET(request: Request) {
         const body = await request.json();
         const { taskId, agentId } = body;
 
-        (useAgentOS as any).completeTask(taskId, agentId);
+        agentOS.completeTask(taskId, agentId);
 
         return NextResponse.json({
           success: true,
@@ -135,21 +139,20 @@ export async function GET(request: Request) {
       );
 
     default:
-      // Get overview
-      const agents = Array.from((useAgentOS as any).agents.values());
-      const workloads = Array.from((useAgentOS as any).workloads.values());
+      const agents = Array.from(agentOS.agents.values());
+      const workloads = Array.from(agentOS.workloads.values());
 
       return NextResponse.json({
         success: true,
         overview: {
           total_agents: agents.length,
-          total_tasks_in_queue: (useAgentOS as any).global_queue.queue.size,
-          active_locks: (useAgentOS as any).active_locks.size,
-          agent_summary: agents.map((a: any) => ({
+          total_tasks_in_queue: agentOS.global_queue.queue.size,
+          active_locks: agentOS.active_locks.size,
+          agent_summary: agents.map((a) => ({
             id: a.id,
             name: a.name,
             availability: a.availability_score,
-            current_task: a.currentTaskId,
+            current_task: a.current_workflow_id || null,
           })),
         },
       });
@@ -165,7 +168,7 @@ export async function POST(request: Request) {
   switch (action) {
     case 'register':
       try {
-        const agentId = (useAgentOS as any).registerAgent(params as any);
+        const agentId = agentOS.registerAgent(params as any);
         return NextResponse.json({
           success: true,
           agentId,
@@ -180,7 +183,7 @@ export async function POST(request: Request) {
 
     case 'update_heartbeat':
       try {
-        (useAgentOS as any).updateAgentHeartbeat(params.agentId);
+        agentOS.updateAgentHeartbeat(params.agentId);
         return NextResponse.json({
           success: true,
           message: 'Heartbeat updated',
@@ -195,7 +198,7 @@ export async function POST(request: Request) {
     case 'assign_task':
       try {
         const { task, agentId } = params;
-        const result = (useAgentOS as any).assignTask(task as any, agentId);
+        const result = agentOS.assignTask(task as any, agentId);
         return NextResponse.json({
           success: result.success,
           assigned_agent_id: result.assignedAgentId,
@@ -210,7 +213,7 @@ export async function POST(request: Request) {
     case 'complete_task':
       try {
         const { taskId, agentId } = params;
-        (useAgentOS as any).completeTask(taskId, agentId);
+        agentOS.completeTask(taskId, agentId);
         return NextResponse.json({
           success: true,
           message: 'Task completed',
@@ -265,7 +268,7 @@ export async function POST(request: Request) {
     case 'discovery':
       try {
         const { capabilities, agentName } = params;
-        const command = (useAgentOS as any).getAgent(params.agentId) || {};
+        const command = agentOS.getAgent(params.agentId) || {};
         const discoveryCmd = createAgentDiscoveryCommand(capabilities || []);
         return NextResponse.json({
           success: true,
@@ -282,8 +285,8 @@ export async function POST(request: Request) {
     case 'start_work':
       try {
         const { taskId, agentId } = params;
-        (useAgentOS as any).assignTask(
-          { id: taskId, description: 'Auto-assigned task', required_capabilities: [], priority: 5, created_at: Date.now() },
+        agentOS.assignTask(
+          { id: taskId, description: 'Auto-assigned task', required_capabilities: [], priority: 5, created_at: Date.now(), dependencies: [], created_by: 'auto', status: 'pending' },
           agentId
         );
         return NextResponse.json({
@@ -300,8 +303,8 @@ export async function POST(request: Request) {
     case 'phase_register':
       try {
         const { phase, agentIds, priority } = params;
-        const agentSet = new Set(agentIds);
-        (useAgentOS as any).registerPhase(phase, agentSet, priority);
+        const agentSet = new Set<string>(agentIds as string[]);
+        agentOS.registerPhase(phase, agentSet, priority);
         return NextResponse.json({
           success: true,
           message: 'Phase registered',
