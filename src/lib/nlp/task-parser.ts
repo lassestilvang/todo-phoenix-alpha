@@ -327,3 +327,273 @@ export async function parseTaskInput(input: string): Promise<any> {
     ...parsed,
   };
 }
+
+// Smart task decomposition interface
+export interface TaskSubtask {
+  name: string;
+  description?: string;
+  estimate_minutes?: number;
+  priority?: 'high' | 'medium' | 'low';
+  phase?: string; // 'planning', 'execution', 'review', 'delivery'
+  dependencies?: string[]; // Names of required subtasks
+}
+
+export interface TaskDecomposition {
+  originalTask: string;
+  subtasks: TaskSubtask[];
+  overallEstimate: number;
+  breakdownReasoning: string;
+}
+
+export class TaskDecomposer {
+  /**
+   * Decompose a complex task into actionable subtasks
+   */
+  static decompose(taskText: string): TaskDecomposition {
+    const originalTask = taskText;
+    const subtasks: TaskSubtask[] = [];
+    const lowerText = taskText.toLowerCase();
+
+    // Detection patterns for common task elements
+    const hasPlanningKeyword = /plan|outline|draft|research|gather/i.test(taskText);
+    const hasReviewKeyword = /review|check|validate|approve|test/i.test(taskText);
+    const hasBuildKeyword = /build|create|make|set up|configure/i.test(taskText);
+    const hasDeliverKeyword = /deliver|ship|publish|launch|deploy/i.test(taskText);
+    const hasScheduleKeyword = /schedule|calendar|meeting|call/i.test(taskText);
+
+    // Identify phases based on task type
+    const phases: string[] = [];
+    if (hasPlanningKeyword) phases.push('planning');
+    if (hasBuildKeyword) phases.push('execution');
+    if (hasReviewKeyword) phases.push('review');
+    if (hasDeliverKeyword) phases.push('delivery');
+
+    // Pattern 1: "Do X and Y" -> [X, Y]
+    const andPattern = taskText.match(/((?:do|implement|create|write)\s+[^,]+)\s+and\s+((?:do|implement|create|write)\s+[^.]+)/i);
+    if (andPattern) {
+      subtasks.push({
+        name: andPattern[1].replace(/^(do|implement|create|write)\s+/i, ''),
+        phase: 'execution'
+      });
+      subtasks.push({
+        name: andPattern[2].replace(/^(do|implement|create|write)\s+/i, ''),
+        phase: 'execution'
+      });
+    }
+
+    // Pattern 2: "Prepare X for Y" -> [Prepare X, Deliver to Y]
+    const forPattern = taskText.match(/(prepare|create|write)\s+(.+?)\s+for\s+(.+)/i);
+    if (forPattern) {
+      subtasks.push({
+        name: `${forPattern[1]} ${forPattern[2]}`,
+        phase: 'execution'
+      });
+      if (!hasReviewKeyword) subtasks.push({
+        name: `Review ${forPattern[2]}`,
+        phase: 'review'
+      });
+      subtasks.push({
+        name: `Deliver ${forPattern[2]}`,
+        phase: 'delivery'
+      });
+    }
+
+    // Pattern 3: "X by Y" -> [X preparation, X execution, X deadline reminder]
+    const byPattern = taskText.match(/^(.+?)\s+by\s+(.+)$/i);
+    if (byPattern && subtasks.length === 0) {
+      const description = byPattern[1];
+      subtasks.push({
+        name: `Start ${description}`,
+        phase: 'execution'
+      });
+      subtasks.push({
+        name: `Check progress on ${description}`,
+        phase: 'review'
+      });
+    }
+
+    // Pattern 4: "If X then Y" -> [X, Y]
+    const ifThenPattern = taskText.match(/if\s+(.+?)\s+then\s+(.+)/i);
+    if (ifThenPattern) {
+      subtasks.push({
+        name: ifThenPattern[1],
+        phase: 'planning'
+      });
+      subtasks.push({
+        name: ifThenPattern[2],
+        phase: 'execution'
+      });
+    }
+
+    // Default subtasks for complex projects
+    if (subtasks.length === 0 && taskText.length > 50) {
+      // Estimate complexity from length and keywords
+      const complexity = hasPlanningKeyword ? 2 : hasBuildKeyword ? 2 : hasReviewKeyword ? 1 : 2;
+
+      subtasks.push({
+        name: `Plan and research ${taskText}`,
+        phase: 'planning',
+        estimate_minutes: complexity * 15
+      });
+      subtasks.push({
+        name: `Execute ${taskText}`,
+        phase: 'execution',
+        estimate_minutes: complexity * 30
+      });
+      if (hasReviewKeyword || complexity > 1) {
+        subtasks.push({
+          name: `Review and finalize`,
+          phase: 'review',
+          estimate_minutes: complexity * 15
+        });
+      }
+    } else if (subtasks.length === 0) {
+      // Simple task, return as single item with potential breakdown
+      subtasks.push({
+        name: taskText,
+        phase: 'execution'
+      });
+    }
+
+    // Calculate total estimate
+    const totalEstimate = subtasks.reduce((sum, s) => sum + (s.estimate_minutes || 15), 0);
+
+    // Generate reasoning
+    const reasoning = TaskDecomposer.generateBreakdownReasoning(
+      originalTask,
+      subtasks,
+      phases
+    );
+
+    return {
+      originalTask,
+      subtasks,
+      overallEstimate: totalEstimate,
+      breakdownReasoning: reasoning
+    };
+  }
+
+  private static generateBreakdownReasoning(
+    original: string,
+    subtasks: TaskSubtask[],
+    phases: string[]
+  ): string {
+    const reasons: string[] = [];
+
+    if (phases.includes('planning')) {
+      reasons.push('Breaking down planning phase first for clarity');
+    }
+
+    if (phases.includes('review') || subtasks.some(s => s.name.toLowerCase().includes('review'))) {
+      reasons.push('Including review step for quality assurance');
+    }
+
+    if (subtasks.length > 2) {
+      reasons.push('Complex task split into multiple manageable pieces');
+    }
+
+    if (original.length > 100) {
+      reasons.push('Long description suggests multiple steps needed');
+    }
+
+    // Check for keywords that suggest specific breaks
+    if (/build|create|set up/i.test(original)) {
+      reasons.push('Setup tasks typically require separate execution steps');
+    }
+
+    if (phases.length > 0) {
+      reasons.push(`Identified phases: ${phases.join(' → ')}`);
+    }
+
+    return reasons.length > 0
+      ? reasons.join('. ') + '.'
+      : 'Task decomposed into logical work phases';
+  }
+
+  /**
+   * Get intelligent suggestions for breaking down a task
+   */
+  static smartSuggestions(taskText: string): {
+    suggestions: string[];
+    recommendedPhases: string[];
+    estimatedComplexity: 'low' | 'medium' | 'high';
+  } {
+    const lowerText = taskText.toLowerCase();
+
+    const suggestions: string[] = [];
+
+    // Analyze complexity indicators
+    const wordBankMatch = /\b(words|text|copy|content|copywriting)\b/.test(lowerText);
+    const codingMatch = /\b(coding|development|build|implement|code|programming)\b/.test(lowerText);
+    const designMatch = /\b(design|ui|ux|graphic|visual|mockup|prototype)\b/.test(lowerText);
+    const researchMatch = /\b(research|investigate|study|learn|analyze)\b/.test(lowerText);
+    const meetingMatch = /\b(meet|meeting|call|review|discuss)\b/.test(lowerText);
+
+    if (wordBankMatch) {
+      suggestions.push('Consider creating a word bank for consistency');
+      suggestions.push('Break content creation into research, draft, edit phases');
+    }
+
+    if (codingMatch) {
+      suggestions.push('Use TDD (Test-Driven Development) approach');
+      suggestions.push('Break into: setup, feature implementation, testing, documentation');
+    }
+
+    if (designMatch) {
+      suggestions.push('Consider separating research, wireframes, mockups, final design');
+    }
+
+    if (researchMatch) {
+      suggestions.push('Create research notes subtask');
+      suggestions.push('Break into: sources, synthesis, findings, recommendations');
+    }
+
+    if (meetingMatch) {
+      suggestions.push('Create prep and follow-up subtasks');
+      suggestions.push('Consider: agenda creation, materials prep, meeting, notes, action items');
+    }
+
+    // Default suggestions based on task length
+    if (taskText.split(' ').length > 10) {
+      suggestions.push('Long task description suggests it needs decomposition');
+      suggestions.push('Consider adding due dates for each subtask');
+    }
+
+    // Determine complexity
+    let estimatedComplexity: 'low' | 'medium' | 'high' = 'low';
+    if (taskText.split(' ').length > 15 || (wordBankMatch && codingMatch) || (researchMatch && meetingMatch)) {
+      estimatedComplexity = 'high';
+    } else if (taskText.split(' ').length > 8) {
+      estimatedComplexity = 'medium';
+    }
+
+    // Determine recommended phases
+    const recommendedPhases: string[] = [];
+    if (hasPlanningKeyword(taskText)) recommendedPhases.push('planning');
+    if (hasBuildKeyword(taskText)) recommendedPhases.push('execution');
+    if (hasReviewKeyword(taskText)) recommendedPhases.push('review');
+
+    if (recommendedPhases.length === 0) {
+      recommendedPhases.push('execution', 'review');
+    }
+
+    return {
+      suggestions,
+      recommendedPhases,
+      estimatedComplexity
+    };
+  }
+}
+
+// Helper functions used in suggestions
+function hasPlanningKeyword(text: string): boolean {
+  return /\b(plan|outline|draft|research|gather|setup|configure)\b/i.test(text);
+}
+
+function hasBuildKeyword(text: string): boolean {
+  return /\b(build|create|make|set up|configure|implement|develop|code)\b/i.test(text);
+}
+
+function hasReviewKeyword(text: string): boolean {
+  return /\b(review|check|validate|approve|test|edit|polish)\b/i.test(text);
+}
