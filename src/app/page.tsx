@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TaskList } from "@/components/tasks/task-list"
 import { TaskFormDialog } from "@/components/tasks/task-form-dialog"
+import { CommandPalette } from "@/components/command-palette"
 import {
   getLists, getTasks, getTasksByListId, getTasksByDate,
   getTasksByDateRange, getUpcomingTasks, getOverdueTasks,
@@ -19,6 +20,14 @@ import { useKeyboardShortcuts } from "@/lib/hooks/use-keyboard-shortcuts"
 import { OnboardingWrapper } from "@/app/components/onboarding/OnboardingWrapper"
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <DashboardContent />
+    </Suspense>
+  )
+}
+
+function DashboardContent() {
   const searchParams = useSearchParams()
   const view = searchParams.get("view") || "today"
   const listId = searchParams.get("list")
@@ -158,6 +167,30 @@ export default function DashboardPage() {
     setSelectedTaskDetails(null)
   }
 
+  // Handle communication with CommandPalette
+  useEffect(() => {
+    const handleOpenTaskForm = () => {
+      setIsTaskFormOpen(true)
+    }
+
+    const handleFocusTaskSearch = () => {
+      // Find the search input in TaskList component
+      const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement
+      if (searchInput) {
+        searchInput.focus()
+        searchInput.select()
+      }
+    }
+
+    window.addEventListener('open-task-form', handleOpenTaskForm)
+    window.addEventListener('focus-task-search', handleFocusTaskSearch)
+
+    return () => {
+      window.removeEventListener('open-task-form', handleOpenTaskForm)
+      window.removeEventListener('focus-task-search', handleFocusTaskSearch)
+    }
+  }, [])
+
   const handleToggleComplete = async (taskId: number) => {
     await toggleTaskComplete(taskId)
     loadData()
@@ -260,7 +293,7 @@ export default function DashboardPage() {
         onCreateList={handleCreateList}
         onCreateLabel={handleCreateLabel}
       />
-      
+
       <main className="flex-1 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
@@ -296,6 +329,8 @@ export default function DashboardPage() {
         labels={labels}
         mode={editingTaskId ? "edit" : "create"}
       />
+
+      <CommandPalette />
     </div>
   )
 }
