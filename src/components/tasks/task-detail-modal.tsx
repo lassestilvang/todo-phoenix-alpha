@@ -386,14 +386,104 @@ function MobileTaskContent({
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {task.attachments.map((attachment) => (
-                <div key={attachment.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                  <span className="text-sm">{attachment.filename}</span>
-                  <Button variant="ghost" size="sm">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {task.attachments.map((attachment) => {
+                const getFileIcon = (fileType: string) => {
+                  const iconMap: Record<string, string> = {
+                    'image': '🖼️',
+                    'document': '📄',
+                    'spreadsheet': '📊',
+                    'presentation': '📊',
+                    'other': '📎',
+                  };
+                  return iconMap[fileType as keyof typeof iconMap] || iconMap.other;
+                };
+
+                const formatFileSize = (bytes?: number) => {
+                  if (!bytes) return '';
+                  const units = ['B', 'KB', 'MB', 'GB'];
+                  let size = bytes;
+                  let unitIndex = 0;
+                  while (size >= 1024 && unitIndex < units.length - 1) {
+                    size /= 1024;
+                    unitIndex++;
+                  }
+                  return `${size.toFixed(1)} ${units[unitIndex]}`;
+                };
+
+                return (
+                  <div key={attachment.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted/70 transition-colors">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className="text-lg flex-shrink-0">{getFileIcon(attachment.file_type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{attachment.filename}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatFileSize(attachment.file_data.length)} • {new Date(attachment.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          const fileData = attachment.file_data;
+                          if (fileData && fileData.startsWith('data:')) {
+                            const byteString = atob(fileData.split(',')[1]);
+                            const mimeType = fileData.split(',')[0].split(':')[1].split(';')[0];
+                            const arrayBuffer = new ArrayBuffer(byteString.length);
+                            const uint8Array = new Uint8Array(arrayBuffer);
+                            for (let i = 0; i < byteString.length; i++) {
+                              uint8Array[i] = byteString.charCodeAt(i);
+                            }
+                            const blob = new Blob([uint8Array], { type: mimeType });
+                            link.href = URL.createObjectURL(blob);
+                            link.download = attachment.filename;
+                            link.click();
+                            URL.revokeObjectURL(link.href);
+                          } else {
+                            // Handle case where file_data might not be Base64
+                            alert('File preview not available in current format');
+                          }
+                        }}
+                      >
+                        Download
+                      </Button>
+                      {attachment.file_type === 'image' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            // Show image preview in a modal or overlay
+                            const imageUrl = attachment.file_data && attachment.file_data.startsWith('data:image/')
+                              ? attachment.file_data
+                              : undefined;
+                            if (imageUrl) {
+                              const newWindow = window.open();
+                              if (newWindow) {
+                                const img = document.createElement('img');
+                                img.src = imageUrl;
+                                img.style.maxWidth = '100%';
+                                img.style.maxHeight = '100vh';
+                                img.style.objectFit = 'contain';
+                                newWindow.document.body.appendChild(img);
+                                newWindow.document.body.style.margin = '0';
+                                newWindow.document.body.style.display = 'flex';
+                                newWindow.document.body.style.alignItems = 'center';
+                                newWindow.document.body.style.justifyContent = 'center';
+                                newWindow.document.body.style.backgroundColor = 'rgba(0,0,0,0.9)';
+                                newWindow.document.title = attachment.filename;
+                              }
+                            }
+                          }}
+                        >
+                          View
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
