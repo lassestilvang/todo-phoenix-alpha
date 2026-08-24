@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import db from '@/lib/db/schema';
 import { getTimeTrackingManager, initializeTimeTrackingRules } from '@/lib/db/time-tracking-rules';
 
@@ -10,13 +10,113 @@ export interface TimeTrackerState {
   taskId: number;
 }
 
-export function useTimeTracker(taskId: number) {
+export interface TimeTrackingRule {
+  min_duration_minutes: number;
+  max_duration_minutes: number;
+  require_description: boolean;
+  allowed_days: number[];
+  allowed_hours_start: string;
+  allowed_hours_end: string;
+}
+
+export interface PomodoroConfig {
+  workDurationMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  longBreakInterval: number; // Every N work sessions
+  autoStartBreaks: boolean;
+  autoStartWork: boolean;
+}
+
+export interface SessionStats {
+  workSessionsCompleted: number;
+  totalWorkMinutes: number;
+  totalBreakMinutes: number;
+  currentStreak: number;
+  longestStreak: number;
+}
+
+export interface BreakSuggestion {
+  type: 'short' | 'long' | 'custom';
+  reason: string;
+  durationMinutes: number;
+  confidence: number;
+}
+
+export interface TimeTrackerReturn {
+  isRunning: boolean;
+  elapsedSeconds: number;
+  isPaused: boolean;
+  isLoading: boolean;
+  startTimer: () => Promise<void>;
+  stopTimer: () => Promise<void>;
+  pauseTimer: () => void;
+  resetTimer: () => void;
+  formatTime: (seconds: number) => string;
+  // New intelligent features
+  pomodoroConfig: PomodoroConfig;
+  updatePomodoroConfig: (config: Partial<PomodoroConfig>) => void;
+  sessionStats: SessionStats;
+  breakSuggestion: BreakSuggestion | null;
+  dismissBreakSuggestion: () => void;
+  getBreakSuggestion: () => Promise<BreakSuggestion | null>;
+  isBreakTime: boolean;
+  timeUntilNextBreak: number; // seconds
+}
+
+// Default Pomodoro configuration
+const DEFAULT_POMODORO_CONFIG: PomodoroConfig = {
+  workDurationMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 15,
+  longBreakInterval: 4, // Every 4 work sessions
+  autoStartBreaks: false,
+  autoStartWork: false,
+};
+
+// Load Pomodoro config from localStorage or use defaults
+function loadPomodoroConfig(): PomodoroConfig {
+  if (typeof window === 'undefined') return DEFAULT_POMODORO_CONFIG;
+  try {
+    const stored = localStorage.getItem('todo-pomodoro-config');
+    if (stored) {
+      return { ...DEFAULT_POMODORO_CONFIG, ...JSON.parse(stored) };
+    }
+  } catch {
+    // Use defaults
+  }
+  return DEFAULT_POMODORO_CONFIG;
+}
+
+// Save Pomodoro config to localStorage
+function savePomodoroConfig(config: PomodoroConfig) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('todo-pomodoro-config', JSON.stringify(config));
+  } catch {
+    // Ignore
+  }
+}
+
+export function useTimeTracker(taskId: number): TimeTrackerReturn {
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [pomodoroConfig, setPomodoroConfigState] = useState<PomodoroConfig>(loadPomodoroConfig);
+  const [sessionStats, setSessionStats] = useState<SessionStats>({
+    workSessionsCompleted: 0,
+    totalWorkMinutes: 0,
+    totalBreakMinutes: 0,
+    currentStreak: 0,
+    longestStreak: 0,
+  });
+  const [breakSuggestion, setBreakSuggestion] = useState<BreakSuggestion | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const snapshotIdRef = useRef<number | null>(null);
+  const lastBreakSuggestionAt = useRef(0);
+  const isBreakTimeRef = useRef(false);
+  const pomodoroSessionCountRef = useRef(0);
 
   // Load saved time snapshot from database on mount
   useEffect(() => {
@@ -54,11 +154,28 @@ export function useTimeTracker(taskId: number) {
     }
   }, [taskId]);
 
+  // Suggest a break (called when user explicitly takes a break or auto-suggests)
+  const suggestBreak = useCallback(() => {
+    setBreakSuggestion({
+      type: 'short',
+      reason: 'Time to take a break - productivity research suggests regular breaks improve focus',
+      durationMinutes: pomodoroConfig.shortBreakMinutes,
+      confidence: 0.95,
+    });
+    lastBreakSuggestionAt.current = elapsedSeconds;
+    isBreakTimeRef.current = true;
+  }, [elapsedSeconds, pomodoroConfig.shortBreakMinutes]);
+
   // Handle window blur/unload to persist timer state
   useEffect(() => {
     const handleBlur = () => {
       // Persist current state when window loses focus
       saveSnapshot();
+
+      // Check if it's time for a break when losing focus
+      if (isRunning && !isPaused && pomodoroConfig.autoStartBreaks) {
+        suggestBreak();
+      }
     };
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -69,6 +186,9 @@ export function useTimeTracker(taskId: number) {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         saveSnapshot();
+      } else {
+        // User returned - check break status after coming back
+        setBreakSuggestion(null);
       }
     };
 
@@ -81,7 +201,7 @@ export function useTimeTracker(taskId: number) {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isRunning, elapsedSeconds, isPaused, taskId]);
+  }, [isRunning, elapsedSeconds, isPaused, taskId, pomodoroConfig.autoStartBreaks, suggestBreak]);
 
   // Persist timer state to database
   const saveSnapshot = useCallback(() => {
@@ -277,6 +397,110 @@ export function useTimeTracker(taskId: number) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Calculate break suggestion: check if enough work time has passed
+  const checkBreakSuggestion = useCallback(() => {
+    if (!isRunning || isPaused) {
+      setBreakSuggestion(null);
+      isBreakTimeRef.current = false;
+      return;
+    }
+
+    const workTimeMinutes = elapsedSeconds / 60;
+    const workIntervalMinutes = pomodoroConfig.workDurationMinutes;
+
+    // Check if we've reached the work interval threshold
+    if (workTimeMinutes >= workIntervalMinutes) {
+      // Calculate how long since last suggestion
+      const secondsSinceLast = elapsedSeconds - lastBreakSuggestionAt.current;
+
+      // Only suggest once per work interval, unless break was taken
+      if (!isBreakTimeRef.current || secondsSinceLast >= workIntervalMinutes * 60) {
+        const reason = workTimeMinutes >= workIntervalMinutes * 2
+          ? 'Extended focus session - take a longer break'
+          : 'Pomodoro cycle complete - take a short break';
+
+        setBreakSuggestion({
+          type: workTimeMinutes >= workIntervalMinutes * 2 ? 'long' : 'short',
+          reason,
+          durationMinutes: workTimeMinutes >= workIntervalMinutes * 2
+            ? pomodoroConfig.longBreakMinutes
+            : pomodoroConfig.shortBreakMinutes,
+          confidence: 0.9,
+        });
+        lastBreakSuggestionAt.current = elapsedSeconds;
+        isBreakTimeRef.current = true;
+      }
+    } else {
+      // Calculate time until next break
+      const minutesUntilNext = workIntervalMinutes - workTimeMinutes;
+      const secondsUntilNext = Math.max(0, minutesUntilNext * 60 - elapsedSeconds % (workIntervalMinutes * 60));
+      // We can expose timeUntilNextBreak if needed, but for now we just track internally
+      isBreakTimeRef.current = false;
+    }
+  }, [isRunning, isPaused, elapsedSeconds, pomodoroConfig.workDurationMinutes, lastBreakSuggestionAt]);
+
+  // Dismiss current break suggestion and reset the timer
+  const dismissBreakSuggestion = useCallback(() => {
+    setBreakSuggestion(null);
+    // Update last suggestion time so we don't suggest again immediately
+    lastBreakSuggestionAt.current = elapsedSeconds;
+    isBreakTimeRef.current = false;
+  }, [elapsedSeconds]);
+
+  // Get current break suggestion
+  const getBreakSuggestion = async (): Promise<BreakSuggestion | null> => {
+    return breakSuggestion;
+  };
+
+  // Update Pomodoro configuration
+  const updatePomodoroConfig = useCallback((newConfig: Partial<PomodoroConfig>) => {
+    const updatedConfig = { ...pomodoroConfig, ...newConfig };
+    setPomodoroConfigState(updatedConfig);
+    savePomodoroConfig(updatedConfig);
+  }, [pomodoroConfig]);
+
+  // Update session stats
+  const updateSessionStats = useCallback((isBreak: boolean) => {
+    setSessionStats(prev => {
+      const totalWorkMinutes = Math.floor((prev.totalWorkMinutes * (prev.workSessionsCompleted || 1) + (isBreak ? 0 : 1)) / (prev.workSessionsCompleted || 1) + 1);
+      const newSessionCount = (prev.workSessionsCompleted || 0) + (isBreak ? 0 : 1);
+      const newBreakMinutes = isBreak ? 0 : (prev.totalBreakMinutes || 0) + (isBreak ? pomodoroConfig.shortBreakMinutes : 0);
+
+      // Calculate streaks
+      const newStreak = isBreak ? 0 : (prev.currentStreak || 0) + 1;
+      const newLongestStreak = Math.max(prev.longestStreak || 0, newStreak);
+
+      return {
+        workSessionsCompleted: newSessionCount,
+        totalWorkMinutes: newSessionCount > 0 ? Math.round(totalWorkMinutes * 10) / 10 : 0,
+        totalBreakMinutes: Math.round((prev.totalBreakMinutes || 0) + (isBreak ? 0 : pomodoroConfig.shortBreakMinutes * 10) / 10),
+        currentStreak: newStreak,
+        longestStreak: newLongestStreak,
+      };
+    });
+  }, [pomodoroConfig]);
+
+  // Calculate time until next break
+  const timeUntilNextBreak = useMemo(() => {
+    if (!isRunning || isPaused) return 0;
+    const elapsedMinutes = elapsedSeconds / 60;
+    const remainder = elapsedMinutes % pomodoroConfig.workDurationMinutes;
+    const remaining = pomodoroConfig.workDurationMinutes - remainder;
+    return remaining > 0 ? Math.round(remaining * 60) : 0;
+  }, [isRunning, isPaused, elapsedSeconds, pomodoroConfig.workDurationMinutes]);
+
+  // Check for break suggestions every second while timer is running
+  useEffect(() => {
+    if (!isRunning || isPaused) return;
+
+    // Check every second for break suggestions
+    const interval = setInterval(() => {
+      checkBreakSuggestion();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isRunning, isPaused, elapsedSeconds, pomodoroConfig.workDurationMinutes, checkBreakSuggestion]);
+
   return {
     isRunning,
     elapsedSeconds,
@@ -287,5 +511,14 @@ export function useTimeTracker(taskId: number) {
     pauseTimer,
     resetTimer,
     formatTime,
+    // New intelligent features
+    pomodoroConfig,
+    updatePomodoroConfig,
+    sessionStats,
+    breakSuggestion,
+    dismissBreakSuggestion,
+    getBreakSuggestion,
+    isBreakTime: !!isBreakTimeRef.current,
+    timeUntilNextBreak: timeUntilNextBreak,
   };
 }
