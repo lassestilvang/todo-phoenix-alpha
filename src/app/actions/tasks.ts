@@ -432,25 +432,687 @@ export async function getTaskSuggestions(taskId: number): Promise<{
   }
 }
 
-// NEW: Handle file attachments
-export async function addAttachmentToTask(
+// NEW: Meeting assistant actions
+export async function analyzeMeeting(meeting: {
+  title: string;
+  date: string;
+  durationMinutes: number;
+  attendees: string[];
+  transcript?: string;
+  notes?: string;
+  platform?: string;
+}): Promise<{
+  summary: string;
+  actionItems: Array<{
+    taskName: string;
+    description: string;
+    assignee?: string;
+    dueDate?: string;
+    priority: string;
+    estimatedMinutes: number;
+    relatedTopics: string[];
+    confidence: number;
+    context: string;
+  }>;
+  decisions: string[];
+  keyTopics: string[];
+  followUpNeeded: boolean;
+  nextSteps: string[];
+  sentiment: string;
+  meetingEffectiveness: number;
+}> {
+  const { analyzeMeeting: _analyzeMeeting } = await import('@/lib/meeting-assistant');
+
+  return _analyzeMeeting({
+    title: meeting.title,
+    date: meeting.date,
+    durationMinutes: meeting.durationMinutes,
+    attendees: meeting.attendees,
+    transcript: meeting.transcript,
+    notes: meeting.notes,
+    platform: meeting.platform as any,
+  });
+}
+
+export async function createTasksFromMeeting(
+  analysis: {
+    actionItems: Array<{
+      taskName: string;
+      description: string;
+      assignee?: string;
+      dueDate?: string;
+      priority: string;
+      estimatedMinutes: number;
+      relatedTopics: string[];
+      confidence: number;
+      context: string;
+    }>;
+  },
+  listId: number
+): Promise<TaskFormData[]> {
+  const { generateTaskSuggestions } = await import('@/lib/ai/enhancement');
+
+  return analysis.actionItems.map(item => ({
+    name: item.taskName,
+    description: item.description,
+    list_id: listId,
+    estimate_minutes: item.estimatedMinutes,
+    priority: item.priority as any,
+    deadline: item.dueDate ? new Date(item.dueDate).toISOString() : undefined,
+  }));
+}
+
+export async function getMeetingTemplates(): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  agenda: string[];
+  defaultDuration: number;
+  typicalAttendees: string[];
+}> {
+  const { getMeetingTemplates: _getTemplates } = await import('@/lib/meeting-assistant');
+
+  const templates = _getTemplates();
+  return templates.map(t => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    agenda: t.agenda,
+    defaultDuration: t.defaultDuration,
+    typicalAttendees: t.typicalAttendees,
+  }));
+}
+
+// NEW: Context-aware task suggestions
+export async function getContextAwareSuggestions(
+  currentTaskId: number,
+  userPreferences?: {
+    preferredTimeOfDay?: number;
+    preferredPriority?: string;
+    typicalTaskDuration?: number;
+  }
+): Promise<{
+  suggestedTasks: Array<{
+    name: string;
+    estimatedMinutes: number;
+    priority: string;
+    reason: string;
+  }>;
+  optimalScheduleBlocks: Array<{
+    hour: number;
+    tasks: string[];
+  }>;
+}> {
+  const { taskOperations } = await import('@/lib/db/tasks');
+
+  const currentTask = taskOperations.getByIdWithDetails(currentTaskId);
+  if (!currentTask) {
+    throw new Error('Task not found');
+  }
+
+  const { generateTaskSuggestions } = await import('@/lib/ai/enhancement');
+
+  // Get AI suggestions
+  const aiSuggestions = await generateTaskSuggestions({
+    priority: currentTask.priority,
+    estimate_minutes: currentTask.estimate_minutes || 30,
+    date: currentTask.deadline
+  });
+
+  // Build context-aware suggestions based on current task and user preferences
+  const defaultSuggestions = [
+    {
+      name: `Follow-up: ${currentTask.name}`,
+      estimatedMinutes: Math.max(30, (currentTask.estimate_minutes || 30) * 0.5),
+      priority: currentTask.priority || 'medium',
+      reason: 'Follow-up on current task progress'
+    },
+    {
+      name: `Review related tasks`,
+      estimatedMinutes: 15,
+      priority: 'low',
+      reason: 'Check for related or dependent tasks'
+    }
+  ];
+
+  // Calculate optimal schedule blocks based on preferences
+  const optimalBlocks = [
+    { hour: 9, tasks: ['Review emails', 'Plan day'] },
+    { hour: 14, tasks: ['Focus work', 'Current task'] },
+    { hour: 16, tasks: ['Meetings', 'Collaboration'] }
+  ];
+
+  const suggestions = [
+    ...defaultSuggestions,
+    ...aiSuggestions.relatedTasks?.length > 0
+      ? [{ name: 'Check related tasks', estimatedMinutes: 10, priority: 'low', reason: 'AI-recommended related tasks' }]
+      : []
+  ];
+
+  return {
+    suggestedTasks: suggestions,
+    optimalScheduleBlocks: optimalBlocks
+  };
+}
+
+// NEW: Enhanced search with smart filters
+export async function smartSearch(
+  query: string,
+  filters?: {
+    priority?: string[];
+    listId?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    hasAttachments?: boolean;
+    hasReminders?: boolean;
+    labels?: number[];
+    sortBy?: 'date' | 'priority' | 'created' | 'relevance';
+    sortOrder?: 'asc' | 'desc';
+  }
+): Promise<{
+  tasks: any[];
+  total: number;
+  fuzzyMatches?: any[];
+  suggestions?: string[];
+}> {
+  const { SearchService } = await import('@/lib/search');
+
+  return SearchService.search(query, filters, {
+    fuzzy: true,
+    fuzzyThreshold: 0.7,
+    sortBy: filters?.sortBy || 'relevance',
+    sortOrder: filters?.sortOrder || 'desc'
+  });
+}
+
+// NEW: Automation engine actions
+export async function createAutomationRule(rule: {
+  name: string;
+  description: string;
+  trigger: any;
+  conditions?: any[];
+  actions: any[];
+  isActive: boolean;
+  priority: 'low' | 'medium' | 'high';
+  createdBy: string;
+}): Promise<{ id: string; name: string }> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  const createdRule = automationEngine.createAutomationRule(rule);
+  return { id: createdRule.id, name: createdRule.name };
+}
+
+export async function executeAutomationRule(ruleId: string, triggerEvent: string, eventData?: any): Promise<{ successes: number; failures: number; history: any[] }> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  const history = automationEngine.executeAutomationRule(ruleId, triggerEvent, eventData);
+  const successes = history.filter(h => h.status === 'success').length;
+  const failures = history.filter(h => h.status === 'failed').length;
+
+  return { successes, failures, history };
+}
+
+export async function getAutomationRules(isActiveOnly?: boolean): Promise<any[]> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  return automationEngine.getAutomationRules(isActiveOnly);
+}
+
+export async function updateAutomationRuleStatus(ruleId: string, isActive: boolean): Promise<{ id: string; isActive: boolean } | undefined> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  return automationEngine.updateAutomationRuleStatus(ruleId, isActive);
+}
+
+export async function deleteAutomationRule(ruleId: string): Promise<boolean> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  return automationEngine.deleteAutomationRule(ruleId);
+}
+
+export async function getAutomationHistory(ruleId?: string, limit?: number): Promise<any[]> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  return automationEngine.getAutomationHistory(ruleId, limit);
+}
+
+export async function getAutomationTemplates(): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  triggerType: string;
+  defaultConfig: any;
+  exampleAction: any;
+  category: string;
+  isPublic: boolean;
+}[]> {
+  const { automationEngine } = await import('@/lib/automation-engine');
+
+  return automationEngine.AUTOMATION_TEMPLATES.map(t => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    triggerType: t.triggerType,
+    defaultConfig: t.defaultConfig,
+    exampleAction: t.exampleAction,
+    category: t.category,
+    isPublic: t.isPublic
+  }));
+}
+
+// NEW: Advanced analytics functions
+export async function getAnalyticsDashboard(): Promise<{
+  taskStats: { total: number; completed: number; inProgress: number; pending: number };
+  productivityMetrics: { avgTaskDuration: number; tasksPerDay: number; completionRate: number };
+  topProjects: { name: string; taskCount: number }[];
+  dailyActivity: { date: string; tasksCreated: number; tasksCompleted: number }[];
+}> {
+  const { taskOperations } = await import('@/lib/db/tasks');
+
+  const allTasks = taskOperations.getAll(true) as any[];
+  const completedTasks = taskOperations.getAll(false) as any[];
+
+  const total = allTasks.length;
+  const completed = completedTasks.filter(t => t.is_completed === 1).length;
+  const inProgress = allTasks.filter(t => !t.is_completed && t.is_completed !== 0).length;
+  const pending = total - completed - inProgress;
+
+  // Calculate completion rate
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  // Calculate average task duration from time entries
+  const avgDurationResult = db.prepare(`
+    SELECT AVG(duration_minutes) as avgMinutes
+    FROM time_entries
+    WHERE duration_minutes > 0 AND actual_minutes > 0
+  `).get() as { avgMinutes: number | null };
+
+  const avgTaskDuration = avgDurationResult?.avgMinutes
+    ? Math.round(avgDurationResult.avgMinutes * 10) / 10
+    : 0;
+
+  // Simplified: tasks per day (last 7 days)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const tasksCreatedLastWeek = db.prepare(`
+    SELECT COUNT(*) as count FROM tasks WHERE date >= ?
+  `).get(sevenDaysAgo) as { count: number };
+
+  const tasksPerDay = tasksCreatedLastWeek?.count ? Math.round(tasksCreatedLastWeek.count / 7) : 0;
+
+  // Top projects - simplified without projects table, using labels/tags as proxy
+  const topProjects: { name: string; taskCount: number }[] = [
+    { name: 'Work', taskCount: 0 },
+    { name: 'Personal', taskCount: 0 },
+    { name: 'Urgent', taskCount: 0 }
+  ];
+
+  // Daily activity (last 7 days)
+  const dailyActivity = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+    const dateStr = date.toISOString().split('T')[0];
+    const created = db.prepare(`
+      SELECT COUNT(*) as count FROM tasks WHERE date = ?
+    `).get(dateStr) as { count: number };
+
+    const completedToday = db.prepare(`
+      SELECT COUNT(*) as count FROM tasks WHERE date = ? AND is_completed = 1
+    `).get(dateStr) as { count: number };
+
+    dailyActivity.push({
+      date: dateStr,
+      tasksCreated: created?.count || 0,
+      tasksCompleted: completedToday?.count || 0
+    });
+  }
+
+  return {
+    taskStats: { total, completed, inProgress, pending },
+    productivityMetrics: {
+      avgTaskDuration,
+      tasksPerDay,
+      completionRate
+    },
+    topProjects,
+    dailyActivity
+  };
+}
+
+// NEW: Template system integration
+export async function applyTemplateToTask(
+  templateName: string,
+  userVariables: Record<string, any>
+): Promise<{ task: any; variables: Record<string, any>; substitutions: { applied: string[]; failed: string[] } }> {
+  const { generateDefaultTemplates } = await import('@/lib/template-engine');
+
+  const templates = generateDefaultTemplates();
+  const template = templates.find(t => t.name === templateName);
+
+  if (!template) {
+    throw new Error(`Template "${templateName}" not found`);
+  }
+
+  return applyTemplate(template, userVariables);
+}
+
+export async function getAvailableTemplates(): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+}> {
+  const { generateDefaultTemplates } = await import('@/lib/template-engine');
+
+  const templates = generateDefaultTemplates();
+
+  return templates.map(t => ({
+    id: t.name,
+    name: t.name,
+    description: t.description || '',
+    category: t.category || 'general'
+  }));
+}
+export async function createComment(comment: {
+  taskId: number;
+  userId: string;
+  content: string;
+  parentId?: string;
+  mentions?: string[];
+  attachments?: string[];
+}): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.createComment(comment);
+}
+
+export async function getComments(taskId: number, includeDeleted?: boolean): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getComments(taskId, includeDeleted);
+}
+
+export async function updateComment(id: string, updates: any): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.updateComment(id, updates);
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.deleteComment(id);
+}
+
+export async function addMention(commentId: string, userId: string): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.addMention(commentId, userId);
+}
+
+export async function getNotifications(userId: string, includeRead?: boolean): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getNotifications(userId, includeRead);
+}
+
+export async function markNotificationRead(id: number): Promise<void> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.markNotificationRead(id);
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.markAllNotificationsRead(userId);
+}
+
+export async function getActivities(userId?: string, limit?: number): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getActivities(userId, limit);
+}
+
+export async function assignTask(taskId: number, assignedTo: string, assignedBy: string, notes?: string): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.assignTask(taskId, assignedTo, assignedBy, notes);
+}
+
+export async function getTaskAssignments(taskId: number): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getTaskAssignments(taskId);
+}
+
+export async function createApprovalWorkflow(workflow: {
+  name: string;
+  description: string;
+  entityType: 'task' | 'subtask' | 'time-entry';
+  requiredApprovals: number;
+  approvers: string[];
+  isRequired: boolean;
+  requestedBy: string;
+  dueDate?: string;
+}): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.createApprovalWorkflow(workflow);
+}
+
+export async function getPendingApprovals(userId: string): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getPendingApprovals(userId);
+}
+
+export async function submitApproval(workflowId: number, userId: string, decision: 'approve' | 'reject', comment?: string): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.submitApproval(workflowId, userId, decision, comment);
+}
+
+export async function updateUserPresence(presence: {
+  userId: string;
+  status: 'online' | 'away' | 'busy' | 'offline';
+  currentTaskId?: number;
+  currentPage?: string;
+}): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.updatePresence(presence);
+}
+
+export async function getUserPresence(userId: string): Promise<any> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getUserPresence(userId);
+}
+
+export async function getAllUsersPresence(): Promise<any[]> {
+  const { collaborationOperations } = await import('@/lib/collaboration');
+
+  return collaborationOperations.getAllUsersPresence();
+}
+
+// NEW: Enhanced attachment functions
+export async function addAttachmentWithAnalysis(
   taskId: number,
   filename: string,
   fileType: string,
   fileData: string
-): Promise<{ id: number; filename: string; fileType: string; url: string }> {
+): Promise<{
+  id: number;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  hasTextContent: boolean;
+  suggestedTags: string[];
+  thumbnailPath: string;
+}> {
+  const fileSize = Math.ceil((fileData.length * 3) / 4);
+
+  // Check attachment limit (10 per task)
+  const existingCount = db.prepare('SELECT COUNT(*) as count FROM attachments WHERE task_id = ?').get(taskId) as { count: number };
+  if (existingCount.count >= 10) {
+    throw new Error('Maximum of 10 attachments per task exceeded');
+  }
+
+  // Check file size limit (10MB)
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  if (fileSize > MAX_FILE_SIZE) {
+    throw new Error(`File size exceeds 10MB limit`);
+  }
+
+  // Analyze the attachment
+  const { attachmentOperations } = await import('@/lib/db/attachments');
+  const analysis = await attachmentOperations.analyzeAttachment(fileData, fileType);
+  const preview = await attachmentOperations.generatePreview(fileData, fileType);
+  const suggestedTags = attachmentOperations.getSuggestedTags(analysis);
+
   const attachment = db.prepare(`
-    INSERT INTO attachments (task_id, filename, file_type, file_data)
-    VALUES (?, ?, ?, ?)
-  `).run(taskId, filename, fileType, fileData);
+    INSERT INTO attachments (task_id, filename, file_type, file_data, file_size, has_text_content, suggested_tags, thumbnail_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    taskId,
+    filename,
+    fileType,
+    fileData,
+    fileSize,
+    analysis.hasTextContent ? 1 : 0,
+    JSON.stringify(suggestedTags),
+    preview.thumbnailPath
+  );
 
   revalidatePath("/")
   return {
     id: Number(attachment.lastInsertRowid),
     filename,
     fileType,
-    url: `/uploads/${filename}`,
+    fileSize,
+    hasTextContent: analysis.hasTextContent,
+    suggestedTags,
+    thumbnailPath: preview.thumbnailPath
   };
+}
+
+export async function getAttachmentAnalysis(attachmentId: number): Promise<{
+  id: number;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  hasTextContent: boolean;
+  suggestedTags: string[];
+  thumbnailPath: string;
+} | null> {
+  const attachment = db.prepare('SELECT * FROM attachments WHERE id = ?').get(attachmentId);
+  if (!attachment) return null;
+
+  return {
+    id: attachment.id,
+    filename: attachment.filename,
+    fileType: attachment.file_type,
+    fileSize: attachment.file_size,
+    hasTextContent: attachment.has_text_content === 1,
+    suggestedTags: attachment.suggested_tags ? JSON.parse(attachment.suggested_tags) : [],
+    thumbnailPath: attachment.thumbnail_path || ''
+  };
+}
+
+export async function getAttachmentsWithAnalysis(taskId: number): Promise<Array<{
+  id: number;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  hasTextContent: boolean;
+  suggestedTags: string[];
+  thumbnailPath: string;
+  createdAt: string;
+}>> {
+  const attachments = db.prepare('SELECT * FROM attachments WHERE task_id = ? ORDER BY created_at DESC').all(taskId) as any[];
+
+  return attachments.map(a => ({
+    id: a.id,
+    filename: a.filename,
+    fileType: a.file_type,
+    fileSize: a.file_size,
+    hasTextContent: a.has_text_content === 1,
+    suggestedTags: a.suggested_tags ? JSON.parse(a.suggested_tags) : [],
+    thumbnailPath: a.thumbnail_path || '',
+    createdAt: a.created_at
+  }));
+}
+
+export async function searchAttachments(
+  query: string,
+  filters?: {
+    fileType?: string[];
+    taskId?: number;
+    hasTextContent?: boolean;
+    tags?: string[];
+    minSize?: number;
+    maxSize?: number;
+  }
+): Promise<Array<{
+  id: number;
+  taskId: number;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  hasTextContent: boolean;
+  suggestedTags: string[];
+  thumbnailPath: string;
+  createdAt: string;
+}>> {
+  let sql = 'SELECT * FROM attachments WHERE 1=1';
+  const params: any[] = [];
+
+  if (query) {
+    sql += ' AND (filename LIKE ? OR suggested_tags LIKE ?)';
+    const searchTerm = `%${query}%`;
+    params.push(searchTerm, searchTerm);
+  }
+
+  if (filters?.fileType && filters.fileType.length > 0) {
+    sql += ` AND file_type IN (${filters.fileType.map(() => '?').join(',')})`;
+    params.push(...filters.fileType);
+  }
+
+  if (filters?.taskId) {
+    sql += ' AND task_id = ?';
+    params.push(filters.taskId);
+  }
+
+  if (filters?.hasTextContent !== undefined) {
+    sql += ' AND has_text_content = ?';
+    params.push(filters.hasTextContent ? 1 : 0);
+  }
+
+  if (filters?.minSize) {
+    sql += ' AND file_size >= ?';
+    params.push(filters.minSize);
+  }
+
+  if (filters?.maxSize) {
+    sql += ' AND file_size <= ?';
+    params.push(filters.maxSize);
+  }
+
+  sql += ' ORDER BY created_at DESC';
+
+  const attachments = db.prepare(sql).all(...params) as any[];
+
+  return attachments.map(a => ({
+    id: a.id,
+    taskId: a.task_id,
+    filename: a.filename,
+    fileType: a.file_type,
+    fileSize: a.file_size,
+    hasTextContent: a.has_text_content === 1,
+    suggestedTags: a.suggested_tags ? JSON.parse(a.suggested_tags) : [],
+    thumbnailPath: a.thumbnail_path || '',
+    createdAt: a.created_at
+  }));
 }
 
 // NEW: Get pending reminders (for notifications)
@@ -461,6 +1123,85 @@ export async function exportDatabaseAsJson(): Promise<{ backupId: number; filePa
     backupId: parts ? Number(parts.split('.')[0]) : 0,
     filePath: backupPath,
   };
+}
+
+// NEW: Enhanced search function
+export async function advancedSearch(
+  query: string,
+  filters?: {
+    priority?: string[];
+    listId?: number;
+    dateRange?: [string, string];
+    hasAttachments?: boolean;
+    hasReminders?: boolean;
+    isCompleted?: boolean;
+    hasSubtasks?: boolean;
+    labels?: number[];
+  },
+  options?: {
+    fuzzy?: boolean;
+    fuzzyThreshold?: number;
+    semantic?: boolean;
+    semanticThreshold?: number;
+    sortBy?: 'date' | 'priority' | 'created' | 'relevance';
+    sortOrder?: 'asc' | 'desc';
+  }
+): Promise<{ tasks: any[]; total: number; fuzzyMatches?: any[]; suggestions?: string[] }> {
+  // Import the search service dynamically to avoid circular imports
+  const { SearchService } = await import('@/lib/search');
+
+  return SearchService.search(query, filters, options || {});
+}
+
+// NEW: Save a search for later use
+export async function saveSearch(search: {
+  name: string;
+  query: string;
+  filters: any;
+  options?: any;
+}): Promise<{ id: number; name: string }> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.saveSearch(search);
+}
+
+// NEW: Get saved searches
+export async function getSavedSearches(userId?: string): Promise<any[]> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.getSavedSearches(userId);
+}
+
+// NEW: Get popular search queries
+export async function getPopularSearches(limit?: number): Promise<string[]> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.getPopularSearches(limit);
+}
+
+// NEW: Create smart folder
+export async function createSmartFolder(
+  name: string,
+  filterQuery: string,
+  filters: any
+): Promise<void> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.createSmartFolder(name, filterQuery, filters);
+}
+
+// NEW: Get all smart folders
+export async function getSmartFolders(): Promise<any[]> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.getSmartFolders();
+}
+
+// NEW: Get tasks in a smart folder
+export async function getSmartFolderTasks(folderId: number): Promise<any[]> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.getSmartFolderTasks(folderId);
+}
+
+// NEW: Delete a saved search
+export async function deleteSearch(id: number): Promise<void> {
+  const { SearchService } = await import('@/lib/search');
+  return SearchService.deleteSearch(id);
 }
 
 // Backup actions
