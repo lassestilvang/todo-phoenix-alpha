@@ -60,6 +60,168 @@ export const calculateNextOccurrence = (
       }
       return null;
 
+    // Enhanced patterns
+    case 'every_other_weekday': {
+      // Skip weekends and alternate between weekdays
+      let skipped = 0;
+      do {
+        date.setDate(date.getDate() + 1);
+        if (date.getDay() !== 0 && date.getDay() !== 6) {
+          skipped++;
+        }
+      } while (skipped < 2); // Skip to the 2nd weekday (every other)
+      return date;
+    }
+
+    case 'every_other_week': {
+      // Every other week
+      date.setDate(date.getDate() + 14);
+      return date;
+    }
+
+    case 'last_day_of_month': {
+      // Calculate the last day of the current month
+      const nextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      const lastDay = new Date(nextMonth.getTime() - 1);
+      return lastDay;
+    }
+
+    case 'first_weekday_of_month': {
+      // Find the first weekday (Monday-Friday) of the next month
+      const firstOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      let currentDate = new Date(firstOfMonth);
+      while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return currentDate;
+    }
+
+    case 'second_weekday_of_month': {
+      // Find the second weekday of the next month
+      const firstOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      let currentDate = new Date(firstOfMonth);
+      let weekdaysFound = 0;
+      while (weekdaysFound < 2) {
+        if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+          weekdaysFound++;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return new Date(currentDate.getTime() - 1); // Go back one day to get the 2nd weekday
+    }
+
+    case 'custom_weekly_pattern': {
+      // Custom weekly pattern with specific days (JSON array of weekday numbers 0-6)
+      if (!isNaN(value) && Array.isArray(customValue) && customValue.length > 0) {
+        const weekdays = customValue as number[];
+        // Find the next date that matches one of the specified weekdays
+        let found = false;
+        let daysToAdd = 0;
+        for (let i = 1; i <= 7 && !found; i++) {
+          const testDate = new Date(date);
+          testDate.setDate(testDate.getDate() + i);
+          if (weekdays.includes(testDate.getDay())) {
+            found = true;
+            daysToAdd = i;
+          }
+        }
+        if (found) {
+          date.setDate(date.getDate() + daysToAdd);
+          return date;
+        }
+      }
+      return null;
+    }
+
+    case 'weekday_weekend_weekday': {
+      // Pattern: weekday -> weekend -> weekday (e.g., Mon -> Sat -> Tue)
+      const weekday = date.getDay();
+      if (weekday >= 1 && weekday <= 5) {
+        // Moving from weekday to weekend
+        const daysToWeekend = 6 - weekday; // Days until Saturday
+        date.setDate(date.getDate() + daysToWeekend);
+      } else if (weekday === 6) {
+        // Saturday -> next weekday (Monday)
+        const daysToMonday = 2 - weekday; // 2 - 6 = -4, so add 7 + (-4) = 3... let's recalculate
+        // Actually: from Saturday (6), Monday is 2 days later
+        date.setDate(date.getDate() + 2);
+      } else if (weekday === 0) {
+        // Sunday -> next weekday (Monday)
+        date.setDate(date.getDate() + 1);
+      }
+      return date;
+    }
+
+    case 'every_n_weekdays': {
+      // Every n weekdays (skip weekends between occurrences)
+      if (!isNaN(value) && value > 0) {
+        let weekdaysFound = 0;
+        let current = new Date(date);
+        while (weekdaysFound < value) {
+          current.setDate(current.getDate() + 1);
+          if (current.getDay() !== 0 && current.getDay() !== 6) {
+            weekdaysFound++;
+          }
+        }
+        return current;
+      }
+      return null;
+    }
+
+    case 'monthly_by_week': {
+      // Monthly by specific week and day (e.g., "2nd Tuesday of month")
+      if (!isNaN(value) && customValue) {
+        const [weekOfMonth, targetWeekday] = customValue.split('-');
+        const week = parseInt(weekOfMonth, 10);
+        const weekday = parseInt(targetWeekday, 10); // 0-6, Sunday-Saturday
+
+        // Get the first day of next month
+        const firstOfNextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+        let currentDate = new Date(firstOfNextMonth);
+
+        // Find the target weekday
+        let weeksFound = 0;
+        while (weeksFound < week) {
+          currentDate.setDate(currentDate.getDate() + 1);
+          if (currentDate.getDay() === weekday) {
+            weeksFound++;
+          }
+        }
+
+        // If we found the right weekday, return it
+        if (weeksFound === week) {
+          return currentDate;
+        }
+      }
+      return null;
+    }
+
+    case 'every_n_weeks_custom': {
+      // Every n weeks with custom weekday pattern
+      if (!isNaN(value) && customValue && Array.isArray(customValue)) {
+        const weekdays = customValue as number[];
+        // Find the next occurrence that includes one of the specified weekdays after n weeks
+        const base = new Date(date);
+        base.setDate(base.getDate() + value * 7); // Go to the n-week mark
+
+        // Find the next matching weekday
+        let found = false;
+        let searchDate = new Date(base);
+        for (let i = 0; i < 7 && !found; i++) {
+          if (weekdays.includes(searchDate.getDay())) {
+            found = true;
+            date.setTime(searchDate.getTime());
+          }
+          searchDate.setDate(searchDate.getDate() + 1);
+        }
+
+        if (found) {
+          return date;
+        }
+      }
+      return null;
+    }
+
     default:
       return null;
   }
@@ -252,12 +414,55 @@ export const taskOperations = {
     db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
   },
 
-  search: (query: string, includeCompleted: boolean = true): Task[] => {
-    const searchQuery = includeCompleted
-      ? `SELECT * FROM tasks WHERE name LIKE ? OR description LIKE ? ORDER BY date ASC, priority DESC, created_at DESC`
-      : `SELECT * FROM tasks WHERE (name LIKE ? OR description LIKE ?) AND is_completed = 0 ORDER BY date ASC, priority DESC, created_at DESC`;
+  search: (query: string, includeCompleted: boolean = true, filters?: { priority?: string[]; listId?: number; dateRange?: [string, string]; hasAttachments?: boolean; hasReminders?: boolean }): Task[] => {
     const searchTerm = `%${query}%`;
-    return db.prepare(searchQuery).all(searchTerm, searchTerm) as Task[];
+
+    // Build WHERE clause with search term and optional filters
+    const whereClauses: string[] = includeCompleted
+      ? ['(name LIKE ? OR description LIKE ?)'
+      : ['((name LIKE ? OR description LIKE ?) AND is_completed = 0)'];
+
+    const values: (string | number)[] = [searchTerm, searchTerm];
+
+    // Apply priority filter
+    if (filters?.priority && filters.priority.length > 0) {
+      const placeholders = filters.priority.map(() => '?').join(',');
+      whereClauses.push(`priority IN (${placeholders})`);
+      values.push(...filters.priority);
+    }
+
+    // Apply list filter
+    if (filters?.listId) {
+      whereClauses.push('list_id = ?');
+      values.push(filters.listId);
+    }
+
+    // Apply date range filter
+    if (filters?.dateRange && filters.dateRange.length === 2) {
+      whereClauses.push('date >= ? AND date <= ?');
+      values.push(...filters.dateRange);
+    }
+
+    // Apply attachments filter
+    if (filters?.hasAttachments !== undefined) {
+      const attachmentFilter = filters.hasAttachments
+        ? 'id IN (SELECT DISTINCT task_id FROM attachments)'
+        : 'id NOT IN (SELECT DISTINCT task_id FROM attachments)';
+      whereClauses.push(attachmentFilter);
+    }
+
+    // Apply reminders filter
+    if (filters?.hasReminders !== undefined) {
+      const reminderFilter = filters.hasReminders
+        ? 'id IN (SELECT DISTINCT task_id FROM reminders)'
+        : 'id NOT IN (SELECT DISTINCT task_id FROM reminders)';
+      whereClauses.push(reminderFilter);
+    }
+
+    const whereClause = whereClauses.join(' AND ');
+    const searchQuery = `SELECT * FROM tasks WHERE ${whereClause} ORDER BY date ASC, priority DESC, created_at DESC`;
+
+    return db.prepare(searchQuery).all(...values) as Task[];
   },
 
   // NEW: Generate next occurrence for recurring tasks
