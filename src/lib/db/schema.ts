@@ -156,6 +156,10 @@ db.exec(`
     filename TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_data TEXT NOT NULL,
+    file_size INTEGER DEFAULT 0,
+    has_text_content INTEGER DEFAULT 0,
+    suggested_tags TEXT, -- JSON array of suggested tags
+    thumbnail_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
   );
@@ -262,6 +266,39 @@ try {
   db.exec('ALTER TABLE time_entries ADD COLUMN duration_minutes INTEGER DEFAULT 0');
 } catch (e: any) {
   // Column already exists, ignore error
+  if (!e.message.includes('duplicate column name')) {
+    throw e;
+  }
+}
+
+// Add enhanced attachment columns if they don't exist
+try {
+  db.exec('ALTER TABLE attachments ADD COLUMN file_size INTEGER DEFAULT 0');
+} catch (e: any) {
+  if (!e.message.includes('duplicate column name')) {
+    throw e;
+  }
+}
+
+try {
+  db.exec('ALTER TABLE attachments ADD COLUMN has_text_content INTEGER DEFAULT 0');
+} catch (e: any) {
+  if (!e.message.includes('duplicate column name')) {
+    throw e;
+  }
+}
+
+try {
+  db.exec('ALTER TABLE attachments ADD COLUMN suggested_tags TEXT');
+} catch (e: any) {
+  if (!e.message.includes('duplicate column name')) {
+    throw e;
+  }
+}
+
+try {
+  db.exec('ALTER TABLE attachments ADD COLUMN thumbnail_path TEXT');
+} catch (e: any) {
   if (!e.message.includes('duplicate column name')) {
     throw e;
   }
