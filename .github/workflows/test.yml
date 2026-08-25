@@ -1,0 +1,90 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Checking coverage thresholds..."
+
+          # Extract coverage percentages
+          LINES_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+          FUNCTIONS_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.functions.pct)")
+          BRANCHES_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.branches.pct)")
+          STATEMENTS_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.statements.pct)")
+
+          echo "Lines: $LINES_PCT%"
+          echo "Functions: $FUNCTIONS_PCT%"
+          echo "Branches: $BRANCHES_PCT%"
+          echo "Statements: $STATEMENTS_PCT%"
+
+          # Check if any metric is below 80%
+          FAILED=false
+
+          if (( $(echo "$LINES_PCT < 80" | bc -l) )); then
+            echo "❌ Lines coverage $LINES_PCT% is below 80%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$FUNCTIONS_PCT < 80" | bc -l) )); then
+            echo "❌ Functions coverage $FUNCTIONS_PCT% is below 80%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$BRANCHES_PCT < 80" | bc -l) )); then
+            echo "❌ Branches coverage $BRANCHES_PCT% is below 80%"
+            FAILED=true
+          fi
+
+          if (( $(echo "$STATEMENTS_PCT < 80" | bc -l) )); then
+            echo "❌ Statements coverage $STATEMENTS_PCT% is below 80%"
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = true ]; then
+            echo "🚨 COVERAGE THRESHOLD NOT MET - BUILD FAILED"
+            exit 1
+          else
+            echo "✅ All coverage thresholds met (≥80%)"
+          fi
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cobertura-report
+          path: coverage/
+          retention-days: 7
+
+      - name: Print test summary
+        if: always()
+        run: |
+          echo "Test Suite Results:"
+          echo "-------------------"
+          cat coverage/coverage-summary.json | jq -r '.total | "Lines: \(.lines.pct)%, Functions: \(.functions.pct)%, Branches: \(.branches.pct)%, Statements: \(.statements.pct)%"'
