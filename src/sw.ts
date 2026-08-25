@@ -1,7 +1,5 @@
-/*
- * Service Worker for Todo Phoenix Alpha PWA
- * Offline-first experience with caching and sync capabilities
- */
+// Service Worker for Todo Phoenix Alpha PWA
+// Offline-first experience with caching and sync capabilities
 
 /// <reference lib="webworker" />
 
@@ -19,7 +17,7 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS.map(asset => new Request(asset, { cache: 'reload' })))
+      return cache.addAll(STATIC_ASSETS.map((asset: string) => new Request(asset, { cache: 'reload' })))
     })
   )
   // Skip waiting so the active worker takes control immediately
@@ -28,9 +26,9 @@ self.addEventListener('install', (event: ExtendableEvent) => {
 
 self.addEventListener('activate', (event: ExtendableEvent) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((cacheNames: string[]) => {
       return Promise.all(
-        cacheNames.map((cache) => {
+        cacheNames.map((cache: string) => {
           if (cache !== CACHE_NAME) {
             return caches.delete(cache)
           }
@@ -73,30 +71,28 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   } else {
     // Network-first strategy for API requests and dynamic content
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          // Cache successful responses
-          const responseToCache = networkResponse.clone()
-          caches.open(CACHE_NAME).then((cache) => {
-            // Don't cache error responses
-            if (networkResponse.ok) {
-              cache.put(request, responseToCache)
-            }
-          })
-          return networkResponse
+      fetch(request).then((networkResponse) => {
+        // Cache successful responses
+        const responseToCache = networkResponse.clone()
+        caches.open(CACHE_NAME).then((cache) => {
+          // Don't cache error responses
+          if (networkResponse.ok) {
+            cache.put(request, responseToCache)
+          }
         })
-        .catch(() => {
-          // Fall back to cache when offline
-          return caches.match(request).then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse
-            }
-            // For HTML documents, show offline page
-            if (request.headers.get('Accept')?.includes('text/html')) {
-              return caches.match('/offline')
-            }
-          })
+        return networkResponse
+      }).catch(() => {
+        // Fall back to cache when offline
+        return caches.match(request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse
+          }
+          // For HTML documents, show offline page
+          if (request.headers.get('Accept')?.includes('text/html')) {
+            return caches.match('/offline')
+          }
         })
+      })
     )
   }
 })
