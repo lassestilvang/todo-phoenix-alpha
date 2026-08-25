@@ -1,127 +1,68 @@
-// Vitest setup file
-import { vi } from 'vitest'
+import '@testing-library/jest-dom';
+import { vi } from 'vitest';
+import '@testing-library/dom';
 
-// Polyfill localStorage for test environment
-let storageMap: Map<string, string> = new Map();
-
-const mockLocalStorage = {
-  getItem: (key: string) => storageMap.get(key) ?? null,
-  setItem: (key: string, value: string) => storageMap.set(key, value),
-  removeItem: (key: string) => storageMap.delete(key),
-  clear: () => storageMap.clear(),
-  key: (index: number) => {
-    const keys = Array.from(storageMap.keys());
-    return index >= 0 && index < keys.length ? keys[index] : null;
-  },
-  get length() {
-    return storageMap.size;
-  },
-};
-
-// Mock localStorage globally for all tests
-Object.defineProperty(globalThis, 'localStorage', {
-  value: mockLocalStorage,
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
   writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
 });
 
-// Helper function to reset localStorage
-function resetLocalStorage() {
-  storageMap.clear();
-}
+// Mock ResizeObserver
+global.ResizeObserver = window.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
 
-// Mock environment variables for tests
-const mockDb = {
-  prepare: vi.fn().mockImplementation((sql) => {
-    // Mock different SQL statements based on what the tests expect
-    if (sql.includes('SELECT version FROM migrations')) {
-      return {
-        get: vi.fn().mockReturnValue({ version: '1.0.0' }),
-        all: vi.fn().mockReturnValue([]),
-        run: vi.fn().mockReturnValue({ lastInsertRowid: 1 }),
-      };
-    }
-    if (sql.includes('SELECT name FROM sqlite_master WHERE type=\'table\'')) {
-      return {
-        all: vi.fn().mockReturnValue([
-          { name: 'tasks' },
-          { name: 'reminders' },
-          { name: 'projects' },
-          { name: 'time_tracking_rules' },
-          { name: 'audit_logs' },
-        ]),
-        get: vi.fn(),
-        run: vi.fn().mockReturnValue({ lastInsertRowid: 1 }),
-      };
-    }
-    if (sql.includes('SELECT * FROM tasks LIMIT 1')) {
-      return {
-        get: vi.fn().mockReturnValue({
-          id: 1,
-          name: 'Test Task',
-          list_id: 1,
-          description: 'Test task for integration',
-          date: new Date().toISOString().split('T')[0],
-          deadline: null,
-          estimate_minutes: 30,
-          actual_minutes: 0,
-          priority: 'medium',
-          is_completed: 0,
-          is_recurring: 0,
-          recurring_pattern: null,
-          recurring_custom_value: null,
-          dependencies: '[]',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }),
-        all: vi.fn().mockReturnValue([]),
-        run: vi.fn().mockReturnValue({ lastInsertRowid: 1 }),
-      };
-    }
-    // Generic mock for other queries
-    return {
-      get: vi.fn().mockReturnValue(null),
-      all: vi.fn().mockReturnValue([]),
-      run: vi.fn().mockReturnValue({ lastInsertRowid: 1 }),
-    };
-  }),
-  exec: vi.fn(),
-  pragma: vi.fn(),
-};
+// Mock IntersectionObserver
+const mockIntersectionObserver = vi.fn(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}));
+global.IntersectionObserver = window.IntersectionObserver = mockIntersectionObserver as any;
 
-vi.mock('@/lib/db/schema', () => {
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
   return {
-    default: mockDb,
-    ...mockDb,
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
+})();
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
+// Mock fetch
+global.fetch = window.fetch = vi.fn(() =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve(''),
+    blob: () => Promise.resolve(new Blob()),
+  })
+) as any;
+
+// Mock navigator
+Object.defineProperty(window.navigator, 'onLine', {
+  writable: true,
+  value: true,
 });
-
-// Mock next/navigation
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/',
-  useSearchParams: () => new URLSearchParams(),
-}))
-
-// Mock react-hook-form
-vi.mock('react-hook-form', () => ({
-  useForm: () => ({
-    register: vi.fn(),
-    handleSubmit: vi.fn(),
-    watch: vi.fn(),
-    formState: { errors: {} },
-  }),
-  Controller: vi.fn(),
-}))
-
-// Mock date-fns
-vi.mock('date-fns', () => ({
-  format: vi.fn((date) => date?.toISOString?.() ?? ''),
-  parseISO: vi.fn((str) => new Date(str)),
-  isBefore: vi.fn(),
-  isAfter: vi.fn(),
-  startOfDay: vi.fn((date) => new Date(date)),
-  endOfDay: vi.fn((date) => new Date(date)),
-  subDays: vi.fn((date, days) => new Date(date.getTime() - days * 86400000)),
-}))
-
-console.log('Vitest setup complete')
