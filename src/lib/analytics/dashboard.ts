@@ -1,5 +1,6 @@
 import type { Task, TaskWithDetails, TimeEntry } from '@/lib/types/index';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
+import { PredictiveAnalytics } from './predictive-analytics';
 
 export interface ProductivityMetrics {
   taskCompletionRate: number;
@@ -351,6 +352,155 @@ export class AnalyticsDashboard {
     score += Math.min(metrics.averageTimePerTask / 120, 1) * 100 * 0.1;
 
     return Math.round(score);
+  }
+
+  /**
+   * Get predictive analytics for task completion timing
+   */
+  async getPredictiveInsights(): Promise<{
+    predictions: { taskId: number; name: string; predictedMinutes: number; confidence: number; predictedCompletion: string | null }[];
+    bottlenecks: { listName?: string; labelName?: string; count: number; estimatedImpact: number }[];
+    recommendations: string[];
+  }> {
+    const predictiveEngine = new PredictiveAnalytics();
+
+    // Get predictions for high-priority incomplete tasks
+    const highPriorityTasks = this.tasks.filter(
+      (t) => t.is_completed === 0 && (t.priority === 'high' || (t.deadline && new Date(t.deadline) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)))
+    );
+
+    const predictions = await Promise.all(
+      highPriorityTasks.map(async (task) => {
+        try {
+          const prediction = await predictiveEngine.getDurationPrediction(task.id);
+          return {
+            taskId: task.id,
+            name: task.name,
+            predictedMinutes: prediction.predictedMinutes,
+            confidence: prediction.confidence,
+            predictedCompletion: prediction.predictedCompletionDate
+          };
+        } catch {
+          return {
+            taskId: task.id,
+            name: task.name,
+            predictedMinutes: task.estimate_minutes || 0,
+            confidence: 0,
+            predictedCompletion: task.deadline || null
+          };
+        }
+      })
+    );
+
+    // Identify bottlenecks (lists/labels with high overdue rates)
+    const bottlenecks = this.identifyBottlenecks();
+
+    // Generate recommendations based on predictions
+    const recommendations = this.generatePredictiveRecommendations(predictions, bottlenecks);
+
+    return { predictions, bottlenecks, recommendations };
+  }
+
+  /**
+   * Identify bottleneck lists and labels
+   */
+  private identifyBottlenecks(): { listName?: string; labelName?: string; count: number; estimatedImpact: number }[] {
+    const bottlenecks: { listName?: string; labelName?: string; count: number; estimatedImpact: number }[] = [];
+
+    // Check lists for high overdue rates
+    this.lists.forEach((list) => {
+      const listTasks = this.tasks.filter((t) => t.list_id === list.id);
+      const overdueTasks = listTasks.filter(
+        (t) => !t.deadline || (t.is_completed === 0 && new Date(t.deadline) < new Date())
+      );
+
+      if (overdueTasks.length > 2) {
+        const estimatedImpact = overdueTasks.reduce(
+          (sum, t) => sum + (t.estimate_minutes || 0),
+          0
+        );
+
+        bottlenecks.push({
+          listName: list.name,
+          count: overdueTasks.length,
+          estimatedImpact
+        });
+      }
+    });
+
+    // Check labels for high overdue rates
+    this.labels.forEach((label) => {
+      const labelTasks = this.tasks.filter(
+        (t) => t.labels && t.labels.some((l: any) => l.id === label.id)
+      );
+      const overdueTasks = labelTasks.filter(
+        (t) => t.is_completed === 0 && t.deadline && new Date(t.deadline) < new Date()
+      );
+
+      if (overdueTasks.length > 2) {
+        const estimatedImpact = overdueTasks.reduce(
+          (sum, t) => sum + (t.estimate_minutes || 0),
+          0
+        );
+
+        bottlenecks.push({
+          labelName: label.name,
+          count: overdueTasks.length,
+          estimatedImpact
+        });
+      }
+    });
+
+    return bottlenecks.sort((a, b) => b.estimatedImpact - a.estimatedImpact);
+  }
+
+  /**
+   * Generate recommendations from predictive data
+   */
+  private generatePredictiveRecommendations(
+    predictions: { taskId: number; name: string; predictedMinutes: number; confidence: number; predictedCompletion: string | null }[],
+    bottlenecks: { listName?: string; labelName?: string; count: number; estimatedImpact: number }[]
+  ): string[] {
+    const recommendations: string[] = [];
+
+    // Low confidence predictions
+    const lowConfidence = predictions.filter((p) => p.confidence < 0.5);
+    if (lowConfidence.length > 0) {
+      recommendations.push(
+        `${lowConfidence.length} tasks lack sufficient historical data for accurate predictions. Consider tracking actual durations.`
+      );
+    }
+
+    // Tasks predicted to exceed deadlines
+    const overduePredicted = predictions.filter(
+      (p) => p.predictedCompletion === null && p.confidence > 0.5
+    );
+    if (overduePredicted.length > 0) {
+      recommendations.push(
+        `${overduePredicted.length} tasks are predicted to be overdue. Consider rescheduling or delegating these tasks.`
+      );
+    }
+
+    // Bottleneck recommendations
+    if (bottlenecks.length > 0) {
+      const topBottleneck = bottlenecks[0];
+      const bottleneckName = topBottleneck.listName || topBottleneck.labelName || 'unknown';
+      recommendations.push(
+        `Bottleneck detected in "${bottleneckName}" with ${topBottleneck.count} overdue tasks (${Math.round(topBottleneck.estimatedImpact / 60)}h estimated impact). Consider redistributing these tasks.`
+      );
+    }
+
+    // High-priority low-confidence tasks
+    const urgentLowConfidence = predictions.filter(
+      (p) => p.confidence < 0.3 && p.predictedCompletion && new Date(p.predictedCompletion) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    );
+    if (urgentLowConfidence.length > 0) {
+      recommendations.push(
+        `${urgentLowConfidence.length} urgent tasks have low prediction confidence. Review these manually for accurate scheduling.`
+      );
+    }
+
+    return recommendations;
   }
 
   /**
