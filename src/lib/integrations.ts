@@ -1,11 +1,27 @@
 import db from './db/schema';
+import { createHmac } from 'crypto';
+
+// Webhook payload structure
+export interface WebhookPayload {
+  event: string;
+  data: string;
+  [key: string]: unknown;
+}
+
+// Validated webhook result
+export interface ValidatedWebhookResult {
+  event: string;
+  data: unknown;
+  timestamp: string;
+  signature: string;
+}
 
 // Base integration interface
-export interface Integration {
+export interface Integration<TPayload = WebhookPayload, TResult = ValidatedWebhookResult> {
   name: string;
   enabled: boolean;
   description: string;
-  validate: (payload: any) => Promise<any>;
+  validate: (payload: TPayload) => Promise<TResult>;
 }
 
 // Webhook integration implementation
@@ -13,9 +29,9 @@ export class WebhookIntegration implements Integration {
   name = 'webhook';
   enabled = true;
   description = 'Webhook integration for third-party services';
-  secret = 'webhook-secret-key';
+  private secret = 'webhook-secret-key';
 
-  async validate(payload: any) {
+  async validate(payload: WebhookPayload): Promise<ValidatedWebhookResult> {
     // Validate webhook payload structure
     if (!payload?.event) {
       throw new Error('Missing event type in webhook payload');
@@ -31,8 +47,8 @@ export class WebhookIntegration implements Integration {
     };
   }
 
-  private generateSignature(payload: any): string {
-    const hmac = require('crypto').createHmac('sha256', this.secret);
+  private generateSignature(payload: WebhookPayload): string {
+    const hmac = createHmac('sha256', this.secret);
     return hmac.update(JSON.stringify(payload)).digest('hex');
   }
 }
@@ -46,17 +62,17 @@ export const integrationRegistry = {
 };
 
 // Integration base class helper
-export abstract class IntegrationBase {
+export abstract class IntegrationBase<TPayload = WebhookPayload, TResult = ValidatedWebhookResult> {
   abstract name: string;
   abstract enabled: boolean;
   abstract description: string;
-  abstract validate: (payload: any) => Promise<any>;
+  abstract validate: (payload: TPayload) => Promise<TResult>;
 }
 
 // Integration result format
-export interface IntegrationResult {
+export interface IntegrationResult<TData = unknown> {
   success: boolean;
-  data?: any;
+  data?: TData;
   error?: string;
   timestamp: string;
 }
@@ -65,14 +81,14 @@ export interface IntegrationResult {
 declare namespace NodeJS {
   namespace Module {
     interface DynamicRequire {
-      [key: string]: any;
+      [key: string]: unknown;
     }
   }
 }
 
 // Helper function to load integrations
 export const loadIntegrations = async () => {
-  const integrations: { [key: string]: Integration } = {};
+  const integrations: Record<string, Integration> = {};
   try {
     // Dynamically load integration modules
     const integrationModules = require('./integrations').default;
@@ -93,7 +109,10 @@ export const integrationLifecycle = {
     console.log(`Initializing ${integration.name} integration...`);
     // Add initialization logic here
   },
-  async run(integration: Integration, payload: any) {
+  async run<TPayload, TResult>(
+    integration: Integration<TPayload, TResult>,
+    payload: TPayload
+  ): Promise<IntegrationResult<TResult>> {
     console.log(`Processing ${integration.name} integration...`);
     try {
       const validatedData = await integration.validate(payload);
