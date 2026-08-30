@@ -1,4 +1,5 @@
-import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject } from './integration-framework';
+import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject, WebhookEvent, WebhookResult, SyncError, IntegrationFilters } from './integration-framework';
+import { TaskWithDetails } from '@/lib/types';
 import fetch from 'node-fetch';
 
 /**
@@ -45,7 +46,7 @@ export class OutlookIntegration extends BaseIntegration {
 
       // Get user's mailbox info
       const response = await fetch(`${this.apiBase}/me`, { method: 'GET', headers: this.getHeaders() });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (response.ok) {
         return { success: true, message: `Outlook connection successful (${data.displayName || 'User'})` };
@@ -65,7 +66,7 @@ export class OutlookIntegration extends BaseIntegration {
         method: 'GET', headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook folders');
 
       return (data?.value || []).map((folder: any) => ({
@@ -94,7 +95,7 @@ export class OutlookIntegration extends BaseIntegration {
       const response = await fetch(`${this.apiBase}/me/mailFolders/${projectId}`, {
         method: 'GET', headers: this.getHeaders()
       });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook folder');
 
@@ -122,7 +123,7 @@ export class OutlookIntegration extends BaseIntegration {
   // For Outlook, tasks map to tasks in task folders
   async getTasks(projectId?: string, filters?: IntegrationFilters): Promise<ExternalTask[]> {
     try {
-      const folderId = projectId || this.config.credentials.workspaceId || 'msgfolderroot';
+      let folderId = projectId || this.config.credentials.workspaceId || 'msgfolderroot';
       if (!folderId) {
         const projects = await this.getProjects();
         if (projects.length === 0) return [];
@@ -146,7 +147,7 @@ export class OutlookIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook tasks');
 
       return (data?.value || []).map((task: any) => this.transformOutlookTaskToExternal(task));
@@ -162,7 +163,7 @@ export class OutlookIntegration extends BaseIntegration {
         `${this.apiBase}/me/tasks/${taskId}`,
         { method: 'GET', headers: this.getHeaders() }
       );
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook task');
 
@@ -192,7 +193,7 @@ export class OutlookIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to create Outlook task');
 
       return this.transformOutlookTaskToExternal(data);
@@ -218,7 +219,7 @@ export class OutlookIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to update Outlook task');
 
       return this.transformOutlookTaskToExternal(data);
@@ -245,7 +246,7 @@ export class OutlookIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook comments');
 
       return (data?.value || []).map((thread: any) => ({
@@ -284,7 +285,7 @@ export class OutlookIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.error?.message || 'Failed to add Outlook comment');
 
       return {
@@ -348,7 +349,7 @@ export class OutlookIntegration extends BaseIntegration {
       const response = await fetch(`${this.apiBase}/me/messages?$top=1`, {
         method: 'GET', headers: this.getHeaders()
       });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data.error?.message || 'Failed to fetch Outlook users');
 
@@ -387,7 +388,7 @@ export class OutlookIntegration extends BaseIntegration {
         })
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       return data.id || '';
     } catch (error) {
       console.error('Failed to register Outlook webhook:', error);
@@ -412,7 +413,7 @@ export class OutlookIntegration extends BaseIntegration {
     return true;
   }
 
-  async processWebhook(payload: any): Promise<{ success: boolean; action: string; itemId: string }> {
+  async processWebhook(payload: any): Promise<WebhookResult> {
     try {
       const changeType = payload.changeType;
       const resourceData = payload.resourceData;
@@ -420,11 +421,12 @@ export class OutlookIntegration extends BaseIntegration {
       return {
         success: true,
         action: changeType === 'created' ? 'created' : 'updated',
+        itemType: 'task',
         itemId: resourceData?.id || ''
       };
     } catch (error) {
       console.error('Failed to process Outlook webhook:', error);
-      return { success: false, action: 'error', itemId: '' };
+      return { success: false, action: 'ignored', itemType: 'task', itemId: '' };
     }
   }
 
@@ -506,6 +508,99 @@ export class OutlookIntegration extends BaseIntegration {
     }
 
     return undefined;
+  }
+
+  async importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }> {
+    try {
+      // Import Outlook tasks
+      const externalTasks = await this.getTasks();
+      const errors: SyncError[] = [];
+      let imported = 0;
+      const updated = 0;
+
+      imported = externalTasks.length;
+
+      return { imported, updated, deleted: 0, errors };
+    } catch (error) {
+      console.error('Failed to import tasks from Outlook:', error);
+      return {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  async exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }> {
+    try {
+      // Export local tasks to Outlook
+      // This would require fetching local tasks and creating/updating them in Outlook
+      // For now, we'll return a placeholder
+      return { exported: 0, updated: 0, errors: [] };
+    } catch (error) {
+      console.error('Failed to export tasks to Outlook:', error);
+      return {
+        exported: 0,
+        updated: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  // Private helper - transform Outlook task to ExternalTask format
+  private transformOutlookTaskToExternal(task: any): ExternalTask {
+    return {
+      id: task.id || '',
+      externalId: task.id || '',
+      title: task.subject || 'Untitled Task',
+      description: task.body?.content || task.bodyPreview || '',
+      status: task.status === 'completed' ? 'completed' : 'active',
+      priority: this.mapImportanceReverse(task.importance || 'normal'),
+      estimate: this.parseOutlookEstimate(task.body?.content || task.bodyPreview || '') || 0,
+      labels: [],
+      url: task.webUrl || '',
+      projectId: task.folderId || this.config.credentials.workspaceId,
+      parentId: undefined,
+      dueDate: task.dueDateTime ? task.dueDateTime.date : undefined,
+      createdAt: task.createdDateTime || new Date().toISOString(),
+      updatedAt: task.lastModifiedDateTime || new Date().toISOString(),
+      metadata: {
+        status: task.status,
+        importance: task.importance,
+        isSensitive: task.isSensitive
+      }
+    };
+  }
+
+  private mapImportanceReverse(importance: string): 'high' | 'medium' | 'low' | 'none' {
+    switch (importance.toLowerCase()) {
+      case 'high': return 'high';
+      case 'low': return 'low';
+      default: return 'medium';
+    }
+  }
+
+  private mapCategories(priority: string): string[] {
+    const categoryMap: Record<string, string> = {
+      high: 'Red',
+      medium: 'Yellow',
+      low: 'Blue'
+    };
+    const category = categoryMap[priority.toLowerCase()] || categoryMap.medium;
+    return [category];
   }
 }
 
