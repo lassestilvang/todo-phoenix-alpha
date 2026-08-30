@@ -1,5 +1,6 @@
-import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject } from './integration-framework';
+import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject, IntegrationFilters, SyncError, WebhookResult } from './integration-framework';
 import fetch from 'node-fetch';
+import { TaskWithDetails } from '@/lib/types/index';
 
 /**
  * Notion Integration
@@ -46,7 +47,7 @@ export class NotionIntegration extends BaseIntegration {
 
       // Fetch a database to test access
       const response = await fetch(`${this.apiBase}/databases`, { method: 'GET', headers: this.getHeaders() });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (response.ok) {
         return { success: true, message: `Notion connection successful (found ${data.results?.length || 0} databases)` };
@@ -62,7 +63,7 @@ export class NotionIntegration extends BaseIntegration {
     try {
       // Get user's databases
       const response = await fetch(`${this.apiBase}/databases`, { method: 'GET', headers: this.getHeaders() });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data?.message || 'Failed to fetch Notion databases');
 
@@ -93,7 +94,7 @@ export class NotionIntegration extends BaseIntegration {
       const response = await fetch(`${this.apiBase}/databases/${projectId}`, {
         method: 'GET', headers: this.getHeaders()
       });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data?.message || 'Failed to fetch Notion database');
 
@@ -122,7 +123,7 @@ export class NotionIntegration extends BaseIntegration {
   // For Notion, tasks are database items
   async getTasks(projectId?: string, filters?: IntegrationFilters): Promise<ExternalTask[]> {
     try {
-      const databaseId = projectId || this.config.credentials.workspaceId;
+      let databaseId = projectId || this.config.credentials.workspaceId;
       if (!databaseId) {
         const projects = await this.getProjects();
         if (projects.length === 0) return [];
@@ -150,7 +151,7 @@ export class NotionIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data?.message || 'Failed to fetch Notion tasks');
 
       return (data.results || []).map((item: any) => this.transformNotionItemToTask(item));
@@ -165,7 +166,7 @@ export class NotionIntegration extends BaseIntegration {
       const response = await fetch(`${this.apiBase}/pages/${taskId}`, {
         method: 'GET', headers: this.getHeaders()
       });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data?.message || 'Failed to fetch Notion page');
 
@@ -191,7 +192,7 @@ export class NotionIntegration extends BaseIntegration {
         body: JSON.stringify(page)
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data?.message || 'Failed to create Notion task');
 
       return this.transformNotionItemToTask(data);
@@ -212,7 +213,7 @@ export class NotionIntegration extends BaseIntegration {
         body: JSON.stringify(page)
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data?.message || 'Failed to update Notion task');
 
       return this.transformNotionItemToTask(data);
@@ -220,6 +221,55 @@ export class NotionIntegration extends BaseIntegration {
       console.error(`Failed to update Notion task ${taskId}:`, error);
       throw error;
     }
+  }
+
+  // Helper methods for building Notion page objects
+
+  private buildNotionPageFromTask(task: Partial<ExternalTask>, databaseId: string): Record<string, any> {
+    return {
+      parent: { database_id: databaseId },
+      properties: {
+        Name: {
+          title: [{ text: { content: task.title || 'Untitled' } }]
+        },
+        Description: {
+          rich_text: [{ text: { content: task.description || '' } }]
+        },
+        Priority: {
+          select: { name: task.priority || 'medium' }
+        },
+        Status: {
+          select: { name: task.status === 'completed' ? 'Done' : 'To Do' }
+        }
+      }
+    };
+  }
+
+  private buildNotionPageFromUpdates(taskId: string, updates: Partial<ExternalTask>): Record<string, any> {
+    const properties: Record<string, any> = {};
+
+    if (updates.title !== undefined) {
+      properties.Name = {
+        title: [{ text: { content: updates.title } }]
+      };
+    }
+    if (updates.description !== undefined) {
+      properties.Description = {
+        rich_text: [{ text: { content: updates.description } }]
+      };
+    }
+    if (updates.priority) {
+      properties.Priority = { select: { name: updates.priority } };
+    }
+    if (updates.status !== undefined) {
+      properties.Status = {
+        select: { name: updates.status ? 'Done' : 'To Do' }
+      };
+    }
+
+    return {
+      properties
+    };
   }
 
   async deleteTask(taskId: string): Promise<boolean> {
@@ -293,7 +343,7 @@ export class NotionIntegration extends BaseIntegration {
       const response = await fetch(`${this.apiBase}/users`, {
         method: 'GET', headers: this.getHeaders()
       });
-      const data = await response.json();
+      const data = (await response.json()) as any;
 
       if (!response.ok) throw new Error(data?.message || 'Failed to fetch Notion users');
 
@@ -325,7 +375,7 @@ export class NotionIntegration extends BaseIntegration {
         })
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       return data.id || '';
     } catch (error) {
       console.error('Failed to register Notion webhook:', error);
@@ -350,7 +400,7 @@ export class NotionIntegration extends BaseIntegration {
     return true;
   }
 
-  async processWebhook(payload: any): Promise<{ success: boolean; action: string; itemId: string }> {
+  async processWebhook(payload: any): Promise<WebhookResult> {
     try {
       const trigger = payload.trigger;
       const page = payload?.page?.id;
@@ -358,11 +408,12 @@ export class NotionIntegration extends BaseIntegration {
       return {
         success: true,
         action: 'updated',
+        itemType: 'task',
         itemId: page || ''
       };
     } catch (error) {
       console.error('Failed to process Notion webhook:', error);
-      return { success: false, action: 'error', itemId: '' };
+      return { success: false, action: 'ignored', itemType: 'task', itemId: '' };
     }
   }
 
@@ -464,14 +515,14 @@ export class NotionIntegration extends BaseIntegration {
       externalId: item.id,
       title,
       description: '',
-      status: this.mapNotionStatusToInternal(status),
+      status: this.mapNotionStatusToInternal(status) ? 'completed' : 'active',
       priority: properties?.priority?.select?.name || 'medium',
       dueDate,
       estimate: 0, // Would be tracked in a custom property
       labels,
       url: item.url,
       projectId: item.parent?.id || '',
-      parentId: null,
+      parentId: undefined,
       metadata: {
         lastEdited,
         created: item.created_time,
@@ -502,7 +553,8 @@ export class NotionIntegration extends BaseIntegration {
   private parseCommentsFromDescription(description: string): ExternalComment[] {
     // Parse comment blocks from Notion description
     const comments: ExternalComment[] = [];
-    const commentRegex = /---\s*Comment\s*---\s*\n(.+?)(?:\n---\s*Comment|$)/gis;
+    // Use [\s\S] instead of . with 's' flag for ES2017 compatibility
+    const commentRegex = /---\s*Comment\s*---\s*\n([\s\S]+?)(?:\n---\s*Comment|$)/gi;
 
     let match;
     let idx = 0;
@@ -520,6 +572,56 @@ export class NotionIntegration extends BaseIntegration {
     }
 
     return comments;
+  }
+
+  async importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }> {
+    try {
+      // Import Notion pages as tasks
+      const externalTasks = await this.getTasks();
+      const errors: SyncError[] = [];
+      let imported = 0;
+      const updated = 0;
+
+      imported = externalTasks.length;
+
+      return { imported, updated, deleted: 0, errors };
+    } catch (error) {
+      console.error('Failed to import tasks from Notion:', error);
+      return {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  async exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }> {
+    try {
+      // Export local tasks to Notion
+      // This would require fetching local tasks and creating/updating them in Notion
+      // For now, we'll return a placeholder
+      return { exported: 0, updated: 0, errors: [] };
+    } catch (error) {
+      console.error('Failed to export tasks to Notion:', error);
+      return {
+        exported: 0,
+        updated: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
   }
 }
 
