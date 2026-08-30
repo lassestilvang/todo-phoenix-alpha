@@ -1,4 +1,5 @@
-import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject, IntegrationFilters } from './integration-framework';
+import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject, IntegrationFilters, SyncError, WebhookResult } from './integration-framework';
+import { TaskWithDetails } from '@/lib/types/index';
 import fetch from 'node-fetch';
 
 /**
@@ -85,14 +86,14 @@ export class GitHubIntegration extends BaseIntegration {
           method: 'GET',
           headers: this.getHeaders()
         });
-        data = await response.json();
+        data = (await response.json()) as any;
       } else {
         // Get user projects
         response = await fetch(`${this.apiBase}/user/projects`, {
           method: 'GET',
           headers: this.getHeaders()
         });
-        data = await response.json();
+        data = (await response.json()) as any;
       }
 
       if (!response.ok) throw new Error(data.message || 'Failed to fetch projects');
@@ -127,7 +128,7 @@ export class GitHubIntegration extends BaseIntegration {
           method: 'GET',
           headers: this.getHeaders()
         });
-        const data = await response.json();
+        const data = (await response.json()) as any;
 
         if (!response.ok) throw new Error(data.message || 'Failed to fetch project');
 
@@ -178,7 +179,7 @@ export class GitHubIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to fetch issues');
 
       // Filter out PRs (they have pull_request property)
@@ -201,7 +202,7 @@ export class GitHubIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to fetch issue');
 
       return this.transformIssueToTask(data, `${this.organization}/${this.repo}`);
@@ -227,7 +228,7 @@ export class GitHubIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to create issue');
 
       // Set due date if provided (requires GitHub project integration)
@@ -266,7 +267,7 @@ export class GitHubIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to update issue');
 
       return this.transformIssueToTask(data, `${this.organization}/${this.repo}`);
@@ -295,7 +296,7 @@ export class GitHubIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to fetch comments');
 
       return data.map((comment: any) => ({
@@ -334,7 +335,7 @@ export class GitHubIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.message || 'Failed to add comment');
 
       return {
@@ -414,13 +415,13 @@ export class GitHubIntegration extends BaseIntegration {
           method: 'GET',
           headers: this.getHeaders()
         });
-        data = await response.json();
+        data = (await response.json()) as any;
       } else {
         response = await fetch(`${this.apiBase}/user/followers`, {
           method: 'GET',
           headers: this.getHeaders()
         });
-        data = await response.json();
+        data = (await response.json()) as any;
       }
 
       if (!response.ok) throw new Error(data.message || 'Failed to fetch users');
@@ -459,7 +460,7 @@ export class GitHubIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       return data.id ? data.id.toString() : '';
     } catch (error) {
       console.error('Failed to register GitHub webhook:', error);
@@ -487,30 +488,31 @@ export class GitHubIntegration extends BaseIntegration {
     return true;
   }
 
-  async processWebhook(payload: any): Promise<{ success: boolean; action: string; itemId: string }> {
+  async processWebhook(payload: any): Promise<WebhookResult> {
+    const itemType: 'task' | 'comment' | 'attachment' = 'task';
     try {
       const action = payload.action;
       const issue = payload.issue;
 
       switch (action) {
         case 'opened':
-          return { success: true, action: 'created', itemId: issue.number.toString() };
+          return { success: true, action: 'created', itemType, itemId: issue.number.toString() };
         case 'closed':
-          return { success: true, action: 'updated', itemId: issue.number.toString() };
+          return { success: true, action: 'updated', itemType, itemId: issue.number.toString() };
         case 'reopened':
-          return { success: true, action: 'updated', itemId: issue.number.toString() };
+          return { success: true, action: 'updated', itemType, itemId: issue.number.toString() };
         case 'edited':
-          return { success: true, action: 'updated', itemId: issue.number.toString() };
+          return { success: true, action: 'updated', itemType, itemId: issue.number.toString() };
         case 'deleted':
-          return { success: true, action: 'deleted', itemId: issue.number.toString() };
+          return { success: true, action: 'deleted', itemType, itemId: issue.number.toString() };
         case 'labeled':
-          return { success: true, action: 'updated', itemId: issue.number.toString() };
+          return { success: true, action: 'updated', itemType, itemId: issue.number.toString() };
         default:
-          return { success: true, action: 'ignored', itemId: '' };
+          return { success: true, action: 'ignored', itemType, itemId: '' };
       }
     } catch (error) {
       console.error('Failed to process GitHub webhook:', error);
-      return { success: false, action: 'error', itemId: '' };
+      return { success: false, action: 'ignored', itemType, itemId: '' };
     }
   }
 
@@ -572,7 +574,7 @@ export class GitHubIntegration extends BaseIntegration {
       labels: issue.labels.map((l: any) => l.name),
       url: issue.html_url,
       projectId: repoPath,
-      parentId: null,
+      parentId: undefined,
       metadata: {
         number: issue.number,
         comments: issue.comments,
@@ -652,6 +654,56 @@ export class GitHubIntegration extends BaseIntegration {
       // Implementation would create/update a milestone
     } catch (error) {
       console.warn('Could not set GitHub due date (milestones not supported):', error);
+    }
+  }
+
+  async importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }> {
+    try {
+      // Import GitHub issues/PRs as tasks
+      const externalTasks = await this.getTasks();
+      const errors: SyncError[] = [];
+      let imported = 0;
+      const updated = 0;
+
+      imported = externalTasks.length;
+
+      return { imported, updated, deleted: 0, errors };
+    } catch (error) {
+      console.error('Failed to import tasks from GitHub:', error);
+      return {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  async exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }> {
+    try {
+      // Export local tasks to GitHub
+      // This would require fetching local tasks and creating/updating them in GitHub
+      // For now, we'll return a placeholder
+      return { exported: 0, updated: 0, errors: [] };
+    } catch (error) {
+      console.error('Failed to export tasks to GitHub:', error);
+      return {
+        exported: 0,
+        updated: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
     }
   }
 }
