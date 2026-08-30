@@ -27,10 +27,15 @@ vi.mock('../../app/actions/analytics', () => ({
       completedTasks: 15,
       overdueTasks: 2,
     },
-    trends: {
-      completionRate: [0.6, 0.65, 0.7, 0.75],
-      taskVolume: [15, 18, 22, 20],
-    },
+    trends: [
+      { date: '2024-01-01', tasksCreated: 10, tasksCompleted: 8, timeSpent: 240 },
+      { date: '2024-01-02', tasksCreated: 12, tasksCompleted: 10, timeSpent: 300 },
+      { date: '2024-01-03', tasksCreated: 8, tasksCompleted: 5, timeSpent: 180 },
+    ],
+    productivityByList: [],
+    productivityByLabel: [],
+    topPriorities: [],
+    timeTrackingStats: { totalTrackedTime: 0, averageSession: 0, activeDays: 0 },
   })),
 }))
 
@@ -58,17 +63,21 @@ describe('Analytics data calculation', () => {
       metrics: {
         taskCompletionRate: 0,
         averageTimePerTask: 0,
-        mostProductiveHours: [],
+        mostProductiveHours: [] as number[],
         deadlineAccuracy: 0,
         recurringTaskUsage: 0,
         totalTasks: 0,
         completedTasks: 0,
         overdueTasks: 0,
       },
-      trends: {
-        completionRate: [],
-        taskVolume: [],
-      },
+      trends: [
+        { date: '', tasksCreated: 0, tasksCompleted: 0, timeSpent: 0 },
+        { date: '', tasksCreated: 0, tasksCompleted: 0, timeSpent: 0 },
+      ],
+      productivityByList: [],
+      productivityByLabel: [],
+      topPriorities: [],
+      timeTrackingStats: { totalTrackedTime: 0, averageSessionDuration: 0, longestSession: 0 },
     })
 
     const data = await getAnalyticsData()
