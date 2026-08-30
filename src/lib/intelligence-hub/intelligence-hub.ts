@@ -1,7 +1,8 @@
 import { ContextEngine } from './context-engine';
 import { AgentOrchestrator } from './agent-orchestrator';
 import { WorkflowManager, Workflow, WorkflowStep } from './workflow-manager';
-import { Task, TaskWithDetails, User } from '@/lib/types';
+import { Task, TaskWithDetails } from '@/lib/types';
+import type { UserContext } from './context-engine';
 import { taskOperations } from '@/lib/db/tasks';
 import { timeEntryOperations } from '@/lib/db/time-entries';
 import { listOperations } from '@/lib/db/lists';
@@ -106,7 +107,7 @@ export class IntelligenceHub {
 
     // Tasks related to current projects/goals
     if (context.activeProjects.some(projectId =>
-      task.projectIds?.includes(projectId)
+      task.projects?.some(p => p.id === parseInt(projectId) || String(p.id) === projectId)
     )) {
       return true;
     }
@@ -338,7 +339,7 @@ export class IntelligenceHub {
       })
     );
 
-    const validPredictions = predictions.filter(Boolean) as any[];
+    const validPredictions = forecasts.filter(Boolean) as any[];
 
     // Generate recommendations based on predictions
     const recommendations: string[] = [];
