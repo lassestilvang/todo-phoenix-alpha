@@ -1,95 +1,118 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { Attachment, AttachmentType } from '@/lib/attachments'
 
 // Mock File and FileReader APIs for test environment
 const originalFileReader = global.FileReader;
 const originalFile = global.File;
 
-global.FileReader = function (this: any) {
-  this.result = null;
-  this.error = null;
-  this.onload = null;
-  this.onerror = null;
-  this.readyState = global.FileReader ? global.FileReader.LOADING : 0;
-  this.abort = function() {
-    this.readyState = global.FileReader ? global.FileReader.EMPTY : 2;
-  };
+// Create proper FileReader mock that matches the actual type
+class MockFileReader {
+  result: any = null;
+  error: any = null;
+  onload: ((ev: Event) => any) | null = null;
+  onerror: ((ev: Event) => any) | null = null;
+  readyState: number = 0;
 
-  this.readAsDataURL = function(this: any, blob: Blob) {
+  static readonly EMPTY = 0;
+  static readonly LOADING = 1;
+  static readonly DONE = 2;
+
+  abort() {
+    this.readyState = MockFileReader.EMPTY;
+  }
+
+  readAsDataURL(blob: Blob) {
     // Simulate reading file as data URL
-    const base64 = btoa(
-      new Uint8Array(blob.size || 0)
-        .reduce((data, byte) => data + String.fromCharCode(byte), '')
-    );
-    this.result = `data:${blob.type || ''};base64,${base64}`;
-    if (this.onload) {
-      const ev = new Event('load');
-      this.onload(ev);
+    try {
+      const bytes = new Uint8Array(blob.size || 0);
+      let base64 = '';
+      for (let i = 0; i < bytes.length; i++) {
+        base64 += String.fromCharCode(bytes[i]);
+      }
+      base64 = btoa(base64);
+      this.result = `data:${blob.type || ''};base64,${base64}`;
+      this.readyState = MockFileReader.DONE;
+      if (this.onload) {
+        this.onload(new Event('load'));
+      }
+    } catch (err) {
+      this.error = err;
+      this.readyState = MockFileReader.DONE;
+      if (this.onerror) {
+        this.onerror(new Event('error'));
+      }
     }
-  };
+  }
 
-  this.readAsText = function(this: any, blob: Blob) {
+  readAsText(blob: Blob) {
     // For FileReader.readAsText, we need to simulate async behavior
     setTimeout(() => {
-      const text = new TextDecoder().decode(new Uint8Array(blob.size || 0));
-      this.result = text;
-      if (this.onload) {
-        const ev = new Event('load');
-        this.onload(ev);
+      try {
+        const bytes = new Uint8Array(blob.size || 0);
+        let text = '';
+        for (let i = 0; i < bytes.length; i++) {
+          text += String.fromCharCode(bytes[i]);
+        }
+        this.result = text;
+        this.readyState = MockFileReader.DONE;
+        if (this.onload) {
+          this.onload(new Event('load'));
+        }
+      } catch (err) {
+        this.error = err;
+        this.readyState = MockFileReader.DONE;
+        if (this.onerror) {
+          this.onerror(new Event('error'));
+        }
       }
     }, 0);
-  };
-};
-
-global.File = global.File || function (this: any, name: string, content: string | Blob, options?: any) {
-  this.name = name;
-  this.size = content instanceof Blob ? content.size : (content?.size ?? 0);
-  this.type = content instanceof Blob ? content.type : (content?.type ?? '');
-  this.lastModified = options?.lastModified ?? Date.now();
-  this.arrayBuffer = async () => {
-    const text = typeof content === 'string' ? content : await (content as any).text();
-    return new Uint8Array(text.length);
-  };
-  this.text = async () => {
-    return typeof content === 'string' ? content : await (content as any).text();
-  };
-  this.slice = () => {
-    return {
-      name: this.name,
-      size: this.size,
-      type: this.type,
-      arrayBuffer: this.arrayBuffer,
-      text: this.text,
-    };
-  };
-  this.webkitSlice = this.slice;
-  this.webkitSlice ? this.webkitSlice : (this.webkitSlice = this.slice);
-}
-
-global.FileReader = global.FileReader || function () {
-  this.result = null
-  this.error = null
-
-  this.onload = null
-  this.onerror = null
-
-  this.readAsDataURL = (blob: Blob) => {
-    // Simulate reading file as data URL
-    const base64 = btoa(
-      new Uint8Array(blob.size || 0)
-        .reduce((data, byte) => data + StringFromCharByte(byte), '')
-    )
-    this.result = `data:${blob.type || ''};base64,${base64}`
-    if (this.onload) {
-      const ev = new Event('load')
-      this.onload(ev)
-    }
-  }
-
-  this.readAsText = (blob: Blob) => {
-    const reader = new FileReader() as any
-    reader.readAsDataURL(blob)
   }
 }
+
+// Mock File constructor - cast to any to avoid complex interface issues
+class MockFile {
+  name: string;
+  lastModified: number;
+  webkitRelativePath: string = '';
+
+  readonly size: number;
+  readonly type: string;
+
+  constructor(fileBits: BlobPart[], fileName: string, options?: FilePropertyBag) {
+    this.name = fileName;
+    const content = fileBits[0];
+    this.size = typeof content === 'string' ? content.length :
+                content instanceof Blob ? content.size : 0;
+    this.type = content instanceof Blob ? content.type : '';
+    this.lastModified = options?.lastModified ?? Date.now();
+  }
+
+  arrayBuffer(): Promise<ArrayBuffer> {
+    return Promise.resolve(new ArrayBuffer(0));
+  }
+
+  slice(start?: number, end?: number, contentType?: string): Blob {
+    return new MockFile([], '') as unknown as Blob;
+  }
+
+  stream(): ReadableStream<Uint8Array> {
+    return new ReadableStream();
+  }
+
+  text(): Promise<string> {
+    return Promise.resolve('');
+  }
+
+  async bytes(): Promise<Uint8Array> {
+    return new Uint8Array(0);
+  }
+
+  [Symbol.toStringTag] = 'File';
+}
+
+// Set up the mocks
+global.FileReader = MockFileReader as any;
+global.File = MockFile as any;
 
 // Helper to create mock byte value
 const StringFromCharByte = (byte: number) => String.fromCharCode(byte)
@@ -155,7 +178,7 @@ vi.mock('fs', () => ({
 }))
 
 // Import after all mocks are set up
-import { useAttachments, AttachmentType, determineFileType } from '@/lib/attachments'
+import { useAttachments, determineFileType } from '@/lib/attachments'
 
 describe('Attachment Management', () => {
   beforeEach(() => {
@@ -281,8 +304,6 @@ describe('Attachment Management', () => {
     })
 
     it('should determine file type correctly', () => {
-      const { determineFileType } = useAttachments.getState()
-
       expect(determineFileType('image.png')).toBe('image')
       expect(determineFileType('doc.pdf')).toBe('document')
       expect(determineFileType('spreadsheet.xlsx')).toBe('spreadsheet')
@@ -323,19 +344,47 @@ describe('Attachment Management', () => {
     it('should get file icon based on type', () => {
       const { getFileIcon } = useAttachments.getState()
 
-      expect(getFileIcon({ fileType: 'image' as const })).toBe('🖼️')
-      expect(getFileIcon({ fileType: 'document' as const })).toBe('📄')
-      expect(getFileIcon({ fileType: 'spreadsheet' as const })).toBe('📊')
-      expect(getFileIcon({ fileType: 'presentation' as const })).toBe('📊')
-      expect(getFileIcon({ fileType: 'other' as const })).toBe('📎')
+      const mockAttachment = (fileType: AttachmentType): Attachment => ({
+        id: 'att-1',
+        taskId: 'task-1',
+        filename: 'test',
+        originalName: 'test',
+        fileType,
+        fileSize: 100,
+        fileData: '',
+        version: 1,
+        checksum: '',
+        createdAt: '',
+        createdBy: '',
+      })
+
+      expect(getFileIcon(mockAttachment('image'))).toBe('🖼️')
+      expect(getFileIcon(mockAttachment('document'))).toBe('📄')
+      expect(getFileIcon(mockAttachment('spreadsheet'))).toBe('📊')
+      expect(getFileIcon(mockAttachment('presentation'))).toBe('📊')
+      expect(getFileIcon(mockAttachment('other'))).toBe('📎')
     })
 
     it('should get thumbnail based on type', () => {
       const { getThumbnail } = useAttachments.getState()
 
-      expect(getThumbnail({ fileType: 'image' as const })).toBeDefined()
-      expect(getThumbnail({ fileType: 'document' as const })).toBeDefined()
-      expect(getThumbnail({ fileType: 'other' as const })).toBeDefined()
+      const mockAttachment = (fileType: AttachmentType): Attachment => ({
+        id: 'att-1',
+        taskId: 'task-1',
+        filename: 'test',
+        originalName: 'test',
+        fileType,
+        fileSize: 100,
+        fileData: '',
+        version: 1,
+        checksum: '',
+        createdAt: '',
+        createdBy: '',
+      })
+
+      expect(getThumbnail(mockAttachment('image'))).toBeDefined()
+      expect(getThumbnail(mockAttachment('document'))).toBeDefined()
+      expect(getThumbnail(mockAttachment('other'))).toBeDefined()
     })
   })
 
@@ -350,7 +399,6 @@ describe('Attachment Management', () => {
         { type: 'application/pdf' }
       ) as unknown as File
 
-      // @ts-expect-error - testing edge case
       try {
         await uploadAttachment('task-1', largeFile)
         // If we get here, the test needs to verify behavior
@@ -411,7 +459,6 @@ describe('Attachment Management', () => {
         type: 'application/pdf',
       })
 
-      // @ts-expect-error - testing edge case
       const result = await uploadAttachment('task-1', mockFile)
 
       // The implementation may allow it or reject it - test the behavior
