@@ -408,7 +408,7 @@ export class TaskOptimizerAgent extends BaseAgent {
     evening: TaskWithDetails[];
   }> {
     try {
-      const optimized = {
+      let optimized = {
         morning: [...schedule.morning],
         afternoon: [...schedule.afternoon],
         evening: [...schedule.evening]
