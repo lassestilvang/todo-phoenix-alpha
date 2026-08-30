@@ -281,12 +281,8 @@ export class WorkflowManager {
     }
 
     // Mark task as completed
-    const updateResult = await taskOperations.update(taskId, {
-      is_completed: 1,
-      updated_at: new Date().toISOString()
-    });
-
-    if (!updateResult) {
+    const updatedTask = taskOperations.toggleComplete(taskId);
+    if (!updatedTask || updatedTask.is_completed === 0) {
       return {
         success: false,
         message: 'Failed to update task status',
@@ -458,7 +454,7 @@ export class WorkflowManager {
 
     // Simple transfer from afternoon to morning if morning has capacity
     if (currentLoads.morning > targets.morning && currentLoads.afternoon < targets.afternoon) {
-      const excess = currentLoads.morning - targets.morning;
+      let excess = currentLoads.morning - targets.morning;
       const morningTasks = [...schedule.morning].sort(
         (a, b) => (b.estimate_minutes || 0) - (a.estimate_minutes || 0)
       );
@@ -475,7 +471,7 @@ export class WorkflowManager {
 
     // Simple transfer from evening to afternoon if afternoon has capacity
     if (currentLoads.afternoon > targets.afternoon && currentLoads.evening < targets.evening) {
-      const excess = currentLoads.afternoon - targets.afternoon;
+      let excess = currentLoads.afternoon - targets.afternoon;
       const afternoonTasks = [...schedule.afternoon].sort(
         (a, b) => (b.estimate_minutes || 0) - (a.estimate_minutes || 0)
       );
@@ -515,7 +511,7 @@ export interface WorkflowStep {
 export interface Workflow {
   workflowId: string;
   steps: WorkflowStep[];
-  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'in-progress' | 'completed' | 'cancelled' | 'failed';
   createdAt: string;
   metadata?: any;
 }
