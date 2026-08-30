@@ -1,13 +1,6 @@
 import { expect, describe, it, vi, beforeEach } from 'vitest'
 import { createTaskFromNLP, parseTaskInput } from '../nlp/task-parser'
-import { getTasks, updateTask, Task } from '../db/tasks'
-
-// Mock the database functions
-vi.mock('../db/tasks', () => ({
-  getTasks: vi.fn(),
-  updateTask: vi.fn(),
-  createTask: vi.fn(),
-}))
+import type { Task } from '../types'
 
 // Mock the NLP functions
 vi.mock('../nlp/task-parser', () => ({
@@ -64,28 +57,62 @@ describe('Task updates', () => {
     vi.clearAllMocks()
   })
 
-  it('should update task description', async () => {
-    const initialTask: Task = { id: 1, name: 'Draft presentation', is_completed: 0, user_id: 1, created_at: new Date(), updated_at: new Date() }
+  it('should update task description', () => {
+    const initialTask: Task = {
+      id: 1,
+      list_id: 1,
+      name: 'Draft presentation',
+      description: null,
+      date: null,
+      deadline: null,
+      estimate_minutes: 0,
+      actual_minutes: 0,
+      priority: 'medium',
+      is_completed: 0,
+      is_recurring: 0,
+      recurring_pattern: null,
+      recurring_custom_value: null,
+      dependencies: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
     const updatedTask = { ...initialTask, is_completed: 1 }
     expect(updatedTask.is_completed).toBe(1)
   })
 
-  it('should toggle task completion status', async () => {
-    const task: Task = { id: 1, name: 'Test task', is_completed: 0, user_id: 1, created_at: new Date(), updated_at: new Date() }
+  it('should toggle task completion status', () => {
+    const task: Task = {
+      id: 1,
+      list_id: 1,
+      name: 'Test task',
+      description: null,
+      date: null,
+      deadline: null,
+      estimate_minutes: 0,
+      actual_minutes: 0,
+      priority: 'medium',
+      is_completed: 0,
+      is_recurring: 0,
+      recurring_pattern: null,
+      recurring_custom_value: null,
+      dependencies: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
     const completedTask = { ...task, is_completed: 1 }
     expect(completedTask.is_completed).toBe(1)
   })
 })
 
 describe('Task parsing', () => {
-  it('should parse task with due date', () => {
-    const result = parseTaskInput('Review code tomorrow')
+  it('should parse task with due date', async () => {
+    const result = await parseTaskInput('Review code tomorrow')
     expect(result.name).toBe('Review code')
     expect(result.deadline).toBeDefined()
   })
 
-  it('should handle tasks without dates', () => {
-    const result = parseTaskInput('Learn TypeScript')
+  it('should handle tasks without dates', async () => {
+    const result = await parseTaskInput('Learn TypeScript')
     expect(result.name).toBe('Learn TypeScript')
     expect(result.deadline).toBeNull()
   })
