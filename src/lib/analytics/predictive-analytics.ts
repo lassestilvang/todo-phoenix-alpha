@@ -1,5 +1,5 @@
 import { taskOperations } from '@/lib/db/tasks';
-import { TaskWithDetails } from '@/lib/types';
+import { Task, TaskWithDetails } from '@/lib/types';
 
 /**
  * Predictive Analytics Engine - Forecasts task durations and completion times
@@ -42,7 +42,7 @@ export class PredictiveAnalytics {
     taskId: number,
     userId?: string
   ): Promise<DurationPrediction> {
-    const task = await taskOperations.getById(taskId);
+    const task = await taskOperations.getById(taskId) as TaskWithDetails;
 
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
@@ -77,7 +77,7 @@ export class PredictiveAnalytics {
     const forecasts: TaskDurationForecast[] = [];
 
     for (const taskId of taskIds) {
-      const task = await taskOperations.getById(taskId);
+      const task = await taskOperations.getById(taskId) as TaskWithDetails;
       if (!task) continue;
 
       const prediction = await this.getDurationPrediction(taskId, userId);
@@ -123,9 +123,9 @@ export class PredictiveAnalytics {
       return true;
     });
 
-    // Sort by most recent completion
+    // Sort by most recent completion (use updated_at as proxy since completed_at may not exist)
     return similarTasks
-      .sort((a, b) => new Date(b.completed_at || b.updated_at).getTime() - new Date(a.completed_at || a.updated_at).getTime())
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       .slice(0, 20);
   }
 
@@ -160,7 +160,7 @@ export class PredictiveAnalytics {
   ): {
     predictedMinutes: number;
     confidence: number;
-    methodology: string;
+    methodology: 'historical-average' | 'pattern-matching' | 'hybrid';
     factors: DurationPredictionFactor[];
   } {
     const factors: DurationPredictionFactor[] = [];
