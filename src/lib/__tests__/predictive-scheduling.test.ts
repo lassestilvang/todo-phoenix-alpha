@@ -7,7 +7,7 @@ vi.mock('../db/schema', () => ({
     prepare: vi.fn((query: string) => {
       if (query.includes('SELECT version FROM migrations')) {
         return {
-          get: () => ({ version: '1.0.0' })
+          get: (): { version: string } => ({ version: '1.0.0' })
         }
       }
       if (query.includes('SELECT name FROM sqlite_master WHERE type=\'table\'')) {
@@ -28,11 +28,11 @@ vi.mock('../db/schema', () => ({
       }
       if (query.includes('SELECT id FROM lists WHERE is_default = 1')) {
         return {
-          get: () => ({ id: 1 })
+          get: (): { id: number } => ({ id: 1 })
         }
       }
       return {
-        get: () => null,
+        get: (): null => null,
         all: () => [],
         run: () => ({ changes: () => 0 })
       }
