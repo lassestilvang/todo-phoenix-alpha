@@ -88,6 +88,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       id: 'auto-create',
       name: 'Create task',
       type: 'create-task',
+      isEnabled: true,
       config: {
         title: 'Meeting action item: {{taskName}}',
         description: 'From meeting {{meetingTitle}}',
@@ -111,6 +112,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       id: 'send-reminder',
       name: 'Send notification',
       type: 'send-notification',
+      isEnabled: true,
       config: {
         message: 'Task due soon: {{taskName}}',
         recipients: 'assigned-user'
@@ -134,6 +136,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       id: 'generate-summary',
       name: 'Send weekly summary',
       type: 'send-notification',
+      isEnabled: true,
       config: {
         message: 'Weekly Review: Progress summary and upcoming tasks',
         recipients: 'user'
@@ -155,6 +158,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
       id: 'alert-user',
       name: 'Send alert',
       type: 'send-notification',
+      isEnabled: true,
       config: {
         message: '⚠️ Task deadline approaching: {{taskName}} due in {{days}} days',
         recipients: 'task-assignee'
@@ -456,4 +460,15 @@ const initAutomationDatabase = () => {
 
 initAutomationDatabase();
 
-export { AUTOMATION_TEMPLATES, AutomationTrigger, AutomationAction, AutomationRule, AutomationCondition, AutomationHistory, AutomationTemplate };
+// Create automationEngine object that mirrors the exported functions for compatibility
+const automationEngine = {
+  createAutomationRule,
+  executeAutomationRule,
+  getAutomationRules,
+  updateAutomationRuleStatus,
+  deleteAutomationRule,
+  getAutomationHistory,
+  AUTOMATION_TEMPLATES
+};
+
+export { automationEngine };
