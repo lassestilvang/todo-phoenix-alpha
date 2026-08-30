@@ -1,6 +1,5 @@
 import db from './schema';
 import { Attachment } from '../types';
-import { createBackup } from './tasks';
 
 export interface AttachmentAnalysis {
   filename: string;
@@ -70,7 +69,7 @@ export const attachmentOperations = {
       'application/pdf'
     ];
 
-    const lowerFileType = file_type.toLowerCase();
+    const lowerFileType = fileType.toLowerCase();
 
     // Check if it's a text-based file
     if (textTypes.some(type => lowerFileType.startsWith(type))) {
@@ -114,18 +113,18 @@ export const attachmentOperations = {
     let thumbnailPath = '';
     let previewImage = '';
 
-    const lowerFileType = file_type.toLowerCase();
+    const lowerFileType = fileType.toLowerCase();
 
     // Generate thumbnail for images
     if (lowerFileType.startsWith('image/')) {
       // In a real implementation, we would use a library like sharp to create a thumbnail
       // For now, create a placeholder base64 image
-      previewImage = `data:${file_type};base64,${fileData}`;
+      previewImage = `data:${fileType};base64,${fileData}`;
       thumbnailPath = `/thumbnails/${Date.now()}-thumb.${fileType.split('/')[1] || 'png'}`;
     }
     // Generate preview for PDFs
     else if (lowerFileType === 'application/pdf') {
-      previewImage = `data:${file_type};base64,${fileData}`;
+      previewImage = `data:${fileType};base64,${fileData}`;
       thumbnailPath = '/thumbnails/pdf-thumb.png';
     }
     // Generate preview for documents
@@ -137,12 +136,12 @@ export const attachmentOperations = {
       lowerFileType === 'application/vnd.oasis.opendocument.text' ||
       lowerFileType === 'application/vnd.oasis.opendocument.spreadsheet'
     ) {
-      previewImage = `data:${file_type};base64,${fileData}`;
+      previewImage = `data:${fileType};base64,${fileData}`;
       thumbnailPath = '/thumbnails/doc-thumb.png';
     }
     // Generic file thumbnail
     else {
-      previewImage = `data:${file_type};base64,${fileData}`;
+      previewImage = `data:${fileType};base64,${fileData}`;
       thumbnailPath = '/thumbnails/file-thumb.png';
     }
 
