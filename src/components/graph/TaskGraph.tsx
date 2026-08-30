@@ -30,12 +30,13 @@ export const TaskGraph: React.FC<{
       }, new Map<number, TaskWithDetails>()));
 
       // Build dependency graph
+      const taskIds = new Set(allTasks.map(t => t.id));
       const graph = new Map<number, number[]>();
       allTasks.forEach(task => {
         const deps = task.dependencies
           ? JSON.parse(task.dependencies) as number[]
           : [];
-        graph.set(task.id, deps.filter(d => allTasks.has(d)));
+        graph.set(task.id, deps.filter(d => taskIds.has(d)));
       });
       setDependencyGraph(graph);
 
@@ -71,8 +72,8 @@ export const TaskGraph: React.FC<{
 
     // Find min and max dates
     const allDates = allTasks
-      .filter(t => t.date)
-      .map(t => new Date(t.date));
+      .filter(t => t.date != null)
+      .map(t => new Date(t.date!));
 
     const hasDeadlines = allTasks.some(t => t.deadline);
     const deadlineDates = hasDeadlines
@@ -132,7 +133,7 @@ export const TaskGraph: React.FC<{
     return {
       startDate: minDate.toISOString().split('T')[0],
       endDate: maxDate.toISOString().split('T')[0],
-      taskHeights: new Map(Object.entries({ taskHeight: taskHeight }).map(([k, v]) => [k, v])),
+      taskHeights: new Map([[0, taskHeight]]),
       yPositions,
       barWidths
     };
@@ -238,70 +239,72 @@ export const TaskGraph: React.FC<{
         {visibleTasks.size === 0 ? (
           <p>No tasks found</p>
         ) : (
-          taskData.forEach((task, id) => {
-            const deps = dependencyGraph.get(id) || [];
-            const dependents = getDependents(id);
-            const yPos = layout.yPositions.get(id) || 0;
-            const barWidth = layout.barWidths.get(id) || 100;
+          Array.from(taskData.entries())
+            .filter(([id]) => visibleTasks.has(id))
+            .map(([id, task]) => {
+              const deps = dependencyGraph.get(id) || [];
+              const dependents = getDependents(id);
+              const yPos = layout.yPositions.get(id) || 0;
+              const barWidth = layout.barWidths.get(id) || 100;
 
-            return (
-              <div
-                key={id}
-                className="graph-task-item"
-                style={{
-                  top: `${yPos}px`,
-                  height: '36px',
-                  borderRight: deps.length > 0 ? '2px solid #f6ad55' : 'none'
-                }}
-              >
+              return (
                 <div
-                  className="graph-task-bar"
+                  key={id}
+                  className="graph-task-item"
                   style={{
-                    left: showTimeline ? '100px' : '0',
-                    width: `${barWidth}px`,
-                    backgroundColor: dependents.length > 0 ? '#3b82f6' : '#6366f1'
+                    top: `${yPos}px`,
+                    height: '36px',
+                    borderRight: deps.length > 0 ? '2px solid #f6ad55' : 'none'
                   }}
-                  onClick={() => onTaskSelect?.(id)}
-                  title={task.name}
                 >
-                  <span className="task-name">{task.name.substring(0, 20)}</span>
-                  <span className="task-duration">
-                    {task.date ? new Date(task.date).toLocaleDateString() : 'No date'}
-                  </span>
+                  <div
+                    className="graph-task-bar"
+                    style={{
+                      left: showTimeline ? '100px' : '0',
+                      width: `${barWidth}px`,
+                      backgroundColor: dependents.length > 0 ? '#3b82f6' : '#6366f1'
+                    }}
+                    onClick={() => onTaskSelect?.(id)}
+                    title={task.name}
+                  >
+                    <span className="task-name">{task.name.substring(0, 20)}</span>
+                    <span className="task-duration">
+                      {task.date ? new Date(task.date).toLocaleDateString() : 'No date'}
+                    </span>
+                  </div>
+                  {showDependencies && deps.length > 0 && (
+                    <div className="graph-dependency-lines">
+                      {deps.map(depId => (
+                        <div
+                          key={depId}
+                          className="dependency-line"
+                          style={{
+                            left: `${layout.yPositions.get(depId) || yPos + 18}px`,
+                            top: '4px',
+                            bottom: '4px'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {showDependencies && dependents.length > 0 && (
+                    <div className="graph-dependency-lines">
+                      {dependents.map(depId => (
+                        <div
+                          key={depId}
+                          className="dependency-line reverse"
+                          style={{
+                            left: `${layout.yPositions.get(depId) || yPos + 18}px`,
+                            top: '4px',
+                            bottom: '4px'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {showDependencies && deps.length > 0 && (
-                  <div className="graph-dependency-lines">
-                    {deps.map(depId => (
-                      <div
-                        key={depId}
-                        className="dependency-line"
-                        style={{
-                          left: `${layout.yPositions.get(depId) || yPos + 18}px`,
-                          top: '4px',
-                          bottom: '4px'
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-                {showDependencies && dependents.length > 0 && (
-                  <div className="graph-dependency-lines">
-                    {dependents.map(depId => (
-                      <div
-                        key={depId}
-                        className="dependency-line reverse"
-                        style={{
-                          left: `${layout.yPositions.get(depId) || yPos + 18}px`,
-                          top: '4px',
-                          bottom: '4px'
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })
+              );
+            })
         )}
       </div>
 
