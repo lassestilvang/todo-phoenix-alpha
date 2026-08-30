@@ -22,6 +22,20 @@ export interface IntegrationConfig {
   errorMessage?: string;
 }
 
+export interface UserContext {
+  userId: string;
+  completionRate: number;
+  overdueTasks: number;
+  mostProductiveHours: number[];
+  currentStreak: number;
+  workload: number;
+  meetingEffectiveness: number;
+  activeProjects: string[];
+  productiveHours: number[];
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night';
+  dayOfWeek: number;
+}
+
 export type IntegrationType =
   | 'slack'
   | 'github'
@@ -216,6 +230,9 @@ export abstract class BaseIntegration {
 
   abstract getUsers(projectId?: string): Promise<ExternalUser[]>;
 
+  abstract importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }>;
+  abstract exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }>;
+
   // Webhook management
   abstract registerWebhook(url: string, events: WebhookEvent[]): Promise<string>;
   abstract unregisterWebhook(webhookId: string): Promise<boolean>;
@@ -290,9 +307,6 @@ export abstract class BaseIntegration {
       this.isSyncing = false;
     }
   }
-
-  protected abstract importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }>;
-  protected abstract exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }>;
 
   // Task transformation
   abstract transformToInternal(externalTask: ExternalTask): Partial<TaskWithDetails>;
@@ -530,20 +544,21 @@ export class TaskMapper {
     }
 
     // Map status
-    const status = external[this.mapping.statusField as keyof ExternalTask] || external.status;
+    const statusValue = external[this.mapping.statusField as keyof ExternalTask] || external.status;
+    const status = String(statusValue);
     result.is_completed = this.mapStatusToInternal(status);
 
     // Map priority
-    const priority = external[this.mapping.priorityField as keyof ExternalTask] || external.priority;
-    result.priority = this.mapPriorityToInternal(String(priority));
+    const priorityValue = external[this.mapping.priorityField as keyof ExternalTask] || external.priority;
+    result.priority = this.mapPriorityToInternal(String(priorityValue));
 
     // Map due date
-    const dueDate = external[this.mapping.dueDateField as keyof ExternalTask] || external.dueDate;
-    if (dueDate) result.deadline = String(dueDate);
+    const dueDateValue = external[this.mapping.dueDateField as keyof ExternalTask] || external.dueDate;
+    if (dueDateValue) result.deadline = String(dueDateValue);
 
     // Map estimate
-    const estimate = external[this.mapping.estimateField as keyof ExternalTask] || external.estimate;
-    if (estimate) result.estimate_minutes = Number(estimate);
+    const estimateValue = external[this.mapping.estimateField as keyof ExternalTask] || external.estimate;
+    if (estimateValue) result.estimate_minutes = Number(estimateValue);
 
     // Map labels
     const labels = external[this.mapping.labelsField as keyof ExternalTask] || external.labels;
@@ -586,7 +601,7 @@ export class TaskMapper {
     // Map custom fields
     for (const [internalField, externalField] of Object.entries(this.mapping.customFields)) {
       if ((internal as any)[internalField] !== undefined) {
-        result[externalField] = (internal as any)[internalField];
+        (result as any)[externalField] = (internal as any)[internalField];
       }
     }
 
