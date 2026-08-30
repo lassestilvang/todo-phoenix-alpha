@@ -1,9 +1,11 @@
 import { Anthropic } from '@anthropic-ai/sdk';
 
-// Initialize Claude API client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Initialize Claude API client (mocked in test environment)
+const anthropic = process.env.VITEST
+  ? {} as any
+  : new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || '',
+    });
 
 /**
  * Generate AI suggestions for task optimization
