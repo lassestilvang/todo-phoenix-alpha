@@ -72,7 +72,7 @@ export interface TeamChallenge {
   goalType: 'tasks' | 'points' | 'streak' | 'completion';
   targetValue: number;
   participants: { userId: string; team: string }[];
-    currentProgress: number;
+  currentProgress: number;
   status: 'pending' | 'active' | 'completed' | 'cancelled';
   rewards: string[];
   createdAt: string;
@@ -87,7 +87,7 @@ export interface Experience {
 }
 
 // Achievement definitions
-export const ACHIEVEMENTS: Achievement[] = [
+const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'first-task',
     name: 'First Steps',
@@ -179,11 +179,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   }
 ];
 
-export const LEVEL_THRESHOLDS = [100, 250, 500, 1000, 2000, 4000, 7000, 10000];
+const LEVEL_THRESHOLDS = [100, 250, 500, 1000, 2000, 4000, 7000, 10000];
 
-export const DAILY_BONUS_POINTS = 25;
+const DAILY_BONUS_POINTS = 25;
 
-export const gamificationOperations = {
+const gamificationOperations = {
   // Calculate points for task completion
   calculateTaskPoints: (task: TaskScore): number => {
     let points = task.pointValue + task.bonusPoints;
@@ -445,20 +445,49 @@ export const gamificationOperations = {
 
   // Leaderboard
   getLeaderboard: (period: 'daily' | 'weekly' | 'monthly' | 'all-time' = 'weekly', limit = 10): { userId: string; points: number; badges: number }[] => {
-    const query = `
-      SELECT user_id, SUM(points) as points
-      FROM gamification_events
-      WHERE created_at >= datetime('now', ?)
-      GROUP BY user_id
-      ORDER BY points DESC
-      LIMIT ?
-    `;
+    let query: string;
+    let params: (string | number)[];
 
-    const modifier = period === 'daily' ? '-1 day' :
-                    period === 'weekly' ? '-7 days' :
-                    period === 'monthly' ? '-30 days' : '';
+    if (period === 'all-time') {
+      query = `
+        SELECT user_id, SUM(points) as points
+        FROM gamification_events
+        GROUP BY user_id
+        ORDER BY points DESC
+        LIMIT ?
+      `;
+      params = [limit];
+    } else {
+      query = `
+        SELECT user_id, SUM(points) as points
+        FROM gamification_events
+        WHERE created_at >= datetime('now', ?)
+        GROUP BY user_id
+        ORDER BY points DESC
+        LIMIT ?
+      `;
 
-    return db.prepare(query).all(modifier, limit) as { user_id: string; points: number }[];
+      const modifier = period === 'daily' ? '-1 day' :
+                      period === 'weekly' ? '-7 days' :
+                      '-30 days';
+
+      params = [modifier, limit];
+    }
+
+    const results = db.prepare(query).all(...params) as { user_id: string; points: number }[];
+    return results.map(row => ({
+      userId: row.user_id,
+      points: row.points,
+      badges: 0 // Default to 0 since we don't have badge counts in this query
+    }));
+  },
+
+  // Get user badges count
+  getUserBadgesCount: (userId: string): number => {
+    const result = db.prepare(
+      `SELECT COUNT(*) as count FROM user_badges WHERE user_id = ?`
+    ).get(userId) as { count: number } | undefined;
+    return result?.count ?? 0;
   }
 };
 
