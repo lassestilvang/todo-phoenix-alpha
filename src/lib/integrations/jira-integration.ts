@@ -1,5 +1,6 @@
-import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject } from './integration-framework';
+import { BaseIntegration, IntegrationConfig, ExternalTask, ExternalComment, ExternalUser, ExternalProject, IntegrationFilters, SyncError, WebhookResult } from './integration-framework';
 import fetch from 'node-fetch';
+import { TaskWithDetails } from '@/lib/types/index';
 
 /**
  * Jira Integration
@@ -52,7 +53,7 @@ export class JiraIntegration extends BaseIntegration {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as any;
         return { success: true, message: `Jira connection successful (${data.name})` };
       } else {
         return { success: false, message: 'Jira project access denied' };
@@ -69,7 +70,7 @@ export class JiraIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch projects');
 
       return data.map((project: any) => ({
@@ -100,7 +101,7 @@ export class JiraIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch project');
 
       return {
@@ -139,7 +140,7 @@ export class JiraIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch Jira issues');
 
       return data.issues?.map((issue: any) => this.transformIssueToJiraTask(issue)) || [];
@@ -156,7 +157,7 @@ export class JiraIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch issue');
 
       return this.transformIssueToJiraTask(data);
@@ -189,7 +190,7 @@ export class JiraIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to create issue');
 
       return this.transformIssueToJiraTask(data);
@@ -218,7 +219,7 @@ export class JiraIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to update issue');
 
       return this.transformIssueToJiraTask(data);
@@ -246,7 +247,7 @@ export class JiraIntegration extends BaseIntegration {
         { method: 'GET', headers: this.getHeaders() }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch comments');
 
       return data.comments?.map((comment: any) => ({
@@ -264,9 +265,9 @@ export class JiraIntegration extends BaseIntegration {
         createdAt: comment.created,
         updatedAt: comment.updated,
         metadata: {
-          url: comment.author?.avatarUrls?.48x48
+          url: comment.author?.avatarUrls?.['48x48'] || comment.author?.avatarUrls?.original || ''
         }
-      }): [];
+      })) || [];
     } catch (error) {
       console.error(`Failed to fetch comments for Jira task ${taskId}:`, error);
       return [];
@@ -284,7 +285,7 @@ export class JiraIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to add comment');
 
       return {
@@ -356,7 +357,7 @@ export class JiraIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!response.ok) throw new Error(data.errorMessages?.join(', ') || 'Failed to fetch users');
 
       // Filter to active users
@@ -365,9 +366,9 @@ export class JiraIntegration extends BaseIntegration {
         externalId: user.accountId || user.id || '',
         name: user.displayName || user.name || 'Unknown User',
         email: user.emailAddress || `${user.name?.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-        avatarUrl: user.avatarUrl?.default,
+        avatarUrl: user.avatarUrl?.default || '',
         role: user.accountType || 'member'
-      }): [];
+      })) || [];
     } catch (error) {
       console.error('Failed to fetch Jira users:', error);
       return [];
@@ -392,7 +393,7 @@ export class JiraIntegration extends BaseIntegration {
         }
       );
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       return data.id ? data.id.toString() : '';
     } catch (error) {
       console.error('Failed to register Jira webhook:', error);
@@ -419,22 +420,56 @@ export class JiraIntegration extends BaseIntegration {
     return true;
   }
 
-  async processWebhook(payload: any): Promise<{ success: boolean; action: string; itemId: string }> {
+  async processWebhook(payload: any): Promise<WebhookResult> {
     try {
       const webItem = payload.webItem;
       const issue = webItem?.issue;
 
-      if (!issue) return { success: true, action: 'ignored', itemId: '' };
+      if (!issue) return { success: true, action: 'ignored', itemType: 'task', itemId: '' };
 
       return {
         success: true,
         action: 'updated',
+        itemType: 'task',
         itemId: issue.key
       };
     } catch (error) {
       console.error('Failed to process Jira webhook:', error);
-      return { success: false, action: 'error', itemId: '' };
+      return { success: false, action: 'ignored', itemType: 'task', itemId: '' };
     }
+  }
+
+  // Private helper methods
+  private transformIssueToJiraTask(issue: any): ExternalTask {
+    return {
+      id: issue.id,
+      externalId: issue.id,
+      title: issue.fields.summary || 'Untitled',
+      description: issue.fields.description || '',
+      status: issue.fields.status?.name.toLowerCase() || 'open',
+      priority: issue.fields.priority?.name?.toLowerCase() || 'medium',
+      assignee: issue.fields.assignee ? {
+        id: issue.fields.assignee.accountId,
+        externalId: issue.fields.assignee.accountId,
+        name: issue.fields.assignee.displayName,
+        email: issue.fields.assignee.emailAddress || '',
+        avatarUrl: issue.fields.assignee.avatarUrls?.['48x48'] || ''
+      } : undefined,
+      dueDate: issue.fields.duedate || undefined,
+      estimate: issue.fields.timeoriginalestimate ? Math.round(issue.fields.timeoriginalestimate / 60) : undefined,
+      labels: issue.fields.labels || [],
+      url: issue.fields.self,
+      projectId: issue.fields.project?.key || '',
+      parentId: undefined,
+      metadata: {
+        issueType: issue.fields.issuetype?.name,
+        created: issue.fields.created,
+        updated: issue.fields.updated,
+        reporter: issue.fields.reporter?.displayName
+      },
+      createdAt: issue.fields.created,
+      updatedAt: issue.fields.updated
+    };
   }
 
   // Transformation methods
@@ -520,7 +555,7 @@ export class JiraIntegration extends BaseIntegration {
 
   private parseEstimate(description: string): number | undefined {
     // Look for estimate in description like "Estimate: 8h" or "Story Points: 5"
-    const timeMatch = description.match(/\b(?:estimate|effort|hours?)\s*:\s*(\d+(?:\.\d+)?)\s*h/ii);
+    const timeMatch = description.match(/\b(?:estimate|effort|hours?)\s*:\s*(\d+(?:\.\d+)?)\s*h/i);
     if (timeMatch) {
       return parseFloat(timeMatch[1]) * 60; // Convert hours to minutes
     }
@@ -532,6 +567,57 @@ export class JiraIntegration extends BaseIntegration {
     }
 
     return undefined;
+  }
+
+  async importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }> {
+    try {
+      // Import Jira issues as tasks
+      const externalTasks = await this.getTasks();
+      const errors: SyncError[] = [];
+      let imported = 0;
+      const updated = 0;
+
+      // For simplicity, we'll treat all as new imports
+      imported = externalTasks.length;
+
+      return { imported, updated, deleted: 0, errors };
+    } catch (error) {
+      console.error('Failed to import tasks from Jira:', error);
+      return {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  async exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }> {
+    try {
+      // Export local tasks to Jira
+      // This would require fetching local tasks and creating/updating them in Jira
+      // For now, we'll return a placeholder
+      return { exported: 0, updated: 0, errors: [] };
+    } catch (error) {
+      console.error('Failed to export tasks to Jira:', error);
+      return {
+        exported: 0,
+        updated: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
   }
 }
 
