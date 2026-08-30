@@ -217,7 +217,7 @@ export function AgentRegistry() {
   };
 
   const filterAgents = () => {
-    let filtered = agents.filter((agent) => {
+    const filtered = agents.filter((agent) => {
       const matchesSearch = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            agent.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            agent.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
