@@ -89,7 +89,7 @@ export const calculateNextOccurrence = (
     case 'first_weekday_of_month': {
       // Find the first weekday (Monday-Friday) of the next month
       const firstOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-      let currentDate = new Date(firstOfMonth);
+      const currentDate = new Date(firstOfMonth);
       while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
         currentDate.setDate(currentDate.getDate() + 1);
       }
@@ -99,7 +99,7 @@ export const calculateNextOccurrence = (
     case 'second_weekday_of_month': {
       // Find the second weekday of the next month
       const firstOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-      let currentDate = new Date(firstOfMonth);
+      const currentDate = new Date(firstOfMonth);
       let weekdaysFound = 0;
       while (weekdaysFound < 2) {
         if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
@@ -156,7 +156,7 @@ export const calculateNextOccurrence = (
       // Every n weekdays (skip weekends between occurrences)
       if (!isNaN(value) && value > 0) {
         let weekdaysFound = 0;
-        let current = new Date(date);
+        const current = new Date(date);
         while (weekdaysFound < value) {
           current.setDate(current.getDate() + 1);
           if (current.getDay() !== 0 && current.getDay() !== 6) {
@@ -177,7 +177,7 @@ export const calculateNextOccurrence = (
 
         // Get the first day of next month
         const firstOfNextMonth = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-        let currentDate = new Date(firstOfNextMonth);
+        const currentDate = new Date(firstOfNextMonth);
 
         // Find the target weekday
         let weeksFound = 0;
@@ -206,7 +206,7 @@ export const calculateNextOccurrence = (
 
         // Find the next matching weekday
         let found = false;
-        let searchDate = new Date(base);
+        const searchDate = new Date(base);
         for (let i = 0; i < 7 && !found; i++) {
           if (weekdays.includes(searchDate.getDay())) {
             found = true;
@@ -419,7 +419,7 @@ export const taskOperations = {
 
     // Build WHERE clause with search term and optional filters
     const whereClauses: string[] = includeCompleted
-      ? ['(name LIKE ? OR description LIKE ?)'
+      ? ['(name LIKE ? OR description LIKE ?)']
       : ['((name LIKE ? OR description LIKE ?) AND is_completed = 0)'];
 
     const values: (string | number)[] = [searchTerm, searchTerm];
