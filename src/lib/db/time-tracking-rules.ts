@@ -142,7 +142,7 @@ export class TimeTrackingManager {
     const endMinutes = this.parseTimeString(rule.allowed_hours_end);
 
     let overlapMinutes = 0;
-    let current = new Date(start);
+    const current = new Date(start);
 
     while (current < end) {
       const dayOfWeek = current.getDay();
