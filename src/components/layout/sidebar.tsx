@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   Inbox, Calendar, CalendarDays, ListTodo,
   Plus, Settings, ChevronLeft, ChevronRight,
-  Sun, Moon, BarChart
+  Sun, Moon, BarChart, Activity
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -42,6 +42,7 @@ export function Sidebar({
     { name: "Upcoming", icon: ListTodo, href: "/?view=upcoming" },
     { name: "All", icon: Inbox, href: "/?view=all" },
     { name: "Analytics", icon: BarChart, href: "/analytics" },
+    { name: "Dashboard", icon: Activity, href: "/dashboard" },
   ]
 
   const isActive = (href: string) => {
