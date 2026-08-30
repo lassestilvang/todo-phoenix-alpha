@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { AccessibilityUpdater } from "@/components/tasks/AccessibilityUpdater";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -64,6 +65,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
       </head>
       <body className={`${inter.className} min-h-full flex flex-col antialiased`}>
+        <AccessibilityUpdater />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
