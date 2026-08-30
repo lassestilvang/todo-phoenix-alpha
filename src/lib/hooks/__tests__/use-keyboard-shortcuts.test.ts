@@ -139,7 +139,7 @@ describe('useKeyboardShortcuts Hook', () => {
       const event = { ...mockEvent, key: 'n', ctrlKey: true } as any
 
       // Test with preventDefault = true
-      let shouldPreventDefault = true
+      const shouldPreventDefault = true
 
       if (shouldPreventDefault) {
         event.preventDefault()
@@ -152,7 +152,7 @@ describe('useKeyboardShortcuts Hook', () => {
       const event = { ...mockEvent, key: 'n', ctrlKey: true } as any
 
       // Test with preventDefault = false
-      let shouldPreventDefault = false
+      const shouldPreventDefault = false
 
       if (shouldPreventDefault) {
         event.preventDefault()
@@ -193,8 +193,8 @@ describe('useKeyboardShortcuts Hook', () => {
   describe('shortcut state management', () => {
     it('should track shortcut usage statistics', () => {
       const shortcutStats = {
-        'Ctrl+N': { count: 0, lastUsed: null },
-        'Escape': { count: 0, lastUsed: null },
+        'Ctrl+N': { count: 0, lastUsed: null as number | null },
+        'Escape': { count: 0, lastUsed: null as number | null },
       }
 
       // Simulate shortcut usage
@@ -209,7 +209,7 @@ describe('useKeyboardShortcuts Hook', () => {
       const shortcutStats = {
         'Ctrl+N': { count: 5, lastUsed: Date.now() },
         'Escape': { count: 3, lastUsed: Date.now() },
-      }
+      } as Record<string, { count: number; lastUsed: number | null }>
 
       // Reset all stats
       Object.keys(shortcutStats).forEach(key => {
