@@ -25,7 +25,7 @@ export function initCollaborationServer() {
     console.log('New client connected to collaboration server');
 
     // User joins with their ID on first message
-    let userId: string | null = null;
+    const userId: string | null = null;
 
     ws.on('message', (message) => {
       try {
