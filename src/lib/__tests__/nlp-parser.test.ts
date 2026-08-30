@@ -221,7 +221,7 @@ describe('NLP Task Parsing', () => {
 
       const result = await TaskParser.parse('Update client presentation with quarterly results')
       expect(result.name).toBeDefined()
-      expect(result.name.length).toBeGreaterThan(0)
+      expect(result.name!.length).toBeGreaterThan(0)
     })
 
     it('should handle tasks that are just a single word', async () => {
