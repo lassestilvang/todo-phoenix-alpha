@@ -160,7 +160,7 @@ export async function createRecurringTask(
   const oneWeek = 7 * 24 * 60 * 60 * 1000;
   const currentTime = now.getTime();
   const startTime = start.getTime();
-  let nextRunDate = new Date(startTime);
+  const nextRunDate = new Date(startTime);
 
   // Generate runs for the next 30 days or until end_date
   const maxDays = endDate ? Math.ceil((new Date(endDate).getTime() - startTime) / oneWeek) : 4;
@@ -498,7 +498,7 @@ export async function createTasksFromMeeting(
     list_id: listId,
     estimate_minutes: item.estimatedMinutes,
     priority: item.priority as any,
-    deadline: item.dueDate ? new Date(item.dueDate).toISOString() : undefined,
+    deadline: item.dueDate ? new Date(item.dueDate) : undefined,
   }));
 }
 
@@ -509,7 +509,7 @@ export async function getMeetingTemplates(): Promise<{
   agenda: string[];
   defaultDuration: number;
   typicalAttendees: string[];
-}> {
+}[]> {
   const { getMeetingTemplates: _getTemplates } = await import('@/lib/meeting-assistant');
 
   const templates = _getTemplates();
@@ -636,16 +636,16 @@ export async function createAutomationRule(rule: {
   priority: 'low' | 'medium' | 'high';
   createdBy: string;
 }): Promise<{ id: string; name: string }> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { createAutomationRule } = await import('@/lib/automation-engine');
 
-  const createdRule = automationEngine.createAutomationRule(rule);
+  const createdRule = createAutomationRule(rule);
   return { id: createdRule.id, name: createdRule.name };
 }
 
 export async function executeAutomationRule(ruleId: string, triggerEvent: string, eventData?: any): Promise<{ successes: number; failures: number; history: any[] }> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { executeAutomationRule: executeRule } = await import('@/lib/automation-engine');
 
-  const history = automationEngine.executeAutomationRule(ruleId, triggerEvent, eventData);
+  const history = executeRule(ruleId, triggerEvent, eventData);
   const successes = history.filter(h => h.status === 'success').length;
   const failures = history.filter(h => h.status === 'failed').length;
 
@@ -653,27 +653,27 @@ export async function executeAutomationRule(ruleId: string, triggerEvent: string
 }
 
 export async function getAutomationRules(isActiveOnly?: boolean): Promise<any[]> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { getAutomationRules: getRules } = await import('@/lib/automation-engine');
 
-  return automationEngine.getAutomationRules(isActiveOnly);
+  return getRules(isActiveOnly);
 }
 
 export async function updateAutomationRuleStatus(ruleId: string, isActive: boolean): Promise<{ id: string; isActive: boolean } | undefined> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { updateAutomationRuleStatus: updateRuleStatus } = await import('@/lib/automation-engine');
 
-  return automationEngine.updateAutomationRuleStatus(ruleId, isActive);
+  return updateRuleStatus(ruleId, isActive);
 }
 
 export async function deleteAutomationRule(ruleId: string): Promise<boolean> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { deleteAutomationRule: deleteRule } = await import('@/lib/automation-engine');
 
-  return automationEngine.deleteAutomationRule(ruleId);
+  return deleteRule(ruleId);
 }
 
 export async function getAutomationHistory(ruleId?: string, limit?: number): Promise<any[]> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { getAutomationHistory: getHistory } = await import('@/lib/automation-engine');
 
-  return automationEngine.getAutomationHistory(ruleId, limit);
+  return getHistory(ruleId, limit);
 }
 
 export async function getAutomationTemplates(): Promise<{
@@ -686,9 +686,9 @@ export async function getAutomationTemplates(): Promise<{
   category: string;
   isPublic: boolean;
 }[]> {
-  const { automationEngine } = await import('@/lib/automation-engine');
+  const { AUTOMATION_TEMPLATES } = await import('@/lib/automation-engine');
 
-  return automationEngine.AUTOMATION_TEMPLATES.map(t => ({
+  return AUTOMATION_TEMPLATES.map(t => ({
     id: t.id,
     name: t.name,
     description: t.description,
@@ -783,7 +783,7 @@ export async function applyTemplateToTask(
   templateName: string,
   userVariables: Record<string, any>
 ): Promise<{ task: any; variables: Record<string, any>; substitutions: { applied: string[]; failed: string[] } }> {
-  const { generateDefaultTemplates } = await import('@/lib/template-engine');
+  const { generateDefaultTemplates, applyTemplate } = await import('@/lib/template-engine');
 
   const templates = generateDefaultTemplates();
   const template = templates.find(t => t.name === templateName);
@@ -800,7 +800,7 @@ export async function getAvailableTemplates(): Promise<{
   name: string;
   description: string;
   category: string;
-}> {
+}[]> {
   const { generateDefaultTemplates } = await import('@/lib/template-engine');
 
   const templates = generateDefaultTemplates();
@@ -819,10 +819,11 @@ export async function createComment(comment: {
   parentId?: string;
   mentions?: string[];
   attachments?: string[];
+  deleted?: boolean;
 }): Promise<any> {
   const { collaborationOperations } = await import('@/lib/collaboration');
 
-  return collaborationOperations.createComment(comment);
+  return collaborationOperations.createComment({ ...comment, deleted: comment.deleted ?? false });
 }
 
 export async function getComments(taskId: number, includeDeleted?: boolean): Promise<any[]> {
@@ -917,10 +918,14 @@ export async function updateUserPresence(presence: {
   status: 'online' | 'away' | 'busy' | 'offline';
   currentTaskId?: number;
   currentPage?: string;
+  lastSeen?: string;
 }): Promise<any> {
   const { collaborationOperations } = await import('@/lib/collaboration');
 
-  return collaborationOperations.updatePresence(presence);
+  return collaborationOperations.updatePresence({
+    ...presence,
+    lastSeen: presence.lastSeen || new Date().toISOString()
+  });
 }
 
 export async function getUserPresence(userId: string): Promise<any> {
@@ -1159,7 +1164,7 @@ export async function saveSearch(search: {
   query: string;
   filters: any;
   options?: any;
-}): Promise<{ id: number; name: string }> {
+}): Promise<{ id?: number; name: string }> {
   const { SearchService } = await import('@/lib/search');
   return SearchService.saveSearch(search);
 }
@@ -1395,7 +1400,7 @@ export async function addTaskDependency(taskId: number, dependsOnTaskId: number)
   }
 
   // Check for circular dependency
-  if (wouldCreateCircularDependency(taskId, dependsOnTaskId)) {
+  if (await wouldCreateCircularDependency(taskId, dependsOnTaskId)) {
     throw new Error('Adding this dependency would create a circular dependency');
   }
 
@@ -1429,7 +1434,7 @@ export async function removeTaskDependency(taskId: number, dependsOnTaskId: numb
 /**
  * Check if adding a dependency would create a circular reference
  */
-function wouldCreateCircularDependency(taskId: number, dependsOnTaskId: number): boolean {
+export async function wouldCreateCircularDependency(taskId: number, dependsOnTaskId: number): Promise<boolean> {
   // Use DFS to check if dependsOnTaskId eventually depends on taskId
   const visited = new Set<number>();
   const stack = [dependsOnTaskId];
@@ -1524,4 +1529,49 @@ export async function validateDependencies(taskId: number): Promise<{ valid: boo
   }
 
   return { valid: missing.length === 0, missing };
+}
+
+/**
+ * Add an attachment to a task
+ */
+export async function addAttachmentToTask(
+  taskId: number,
+  filename: string,
+  fileType: string,
+  fileData: string
+): Promise<{ id: number; filename: string; fileType: string; fileSize: number }> {
+  // fileData is already base64 encoded from the component
+
+  // Estimate file size from base64 length
+  const fileSize = Math.round((fileData.length * 3) / 4);
+
+  const result = db.prepare(`
+    INSERT INTO attachments (task_id, filename, file_type, file_size, content, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    taskId,
+    filename,
+    fileType,
+    fileSize,
+    fileData,
+    new Date().toISOString()
+  );
+
+  return {
+    id: Number(result.lastInsertRowid),
+    filename,
+    fileType,
+    fileSize
+  };
+}
+
+/**
+ * Remove an attachment from a task
+ */
+export async function removeAttachmentFromTask(attachmentId: number): Promise<boolean> {
+  const result = db.prepare(`
+    DELETE FROM attachments WHERE id = ?
+  `).run(attachmentId);
+
+  return result.changes > 0;
 }
