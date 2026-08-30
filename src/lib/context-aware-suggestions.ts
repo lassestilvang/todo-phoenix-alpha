@@ -1,6 +1,4 @@
-import db from './db/schema';
-import { Task, TaskWithDetails } from './types';
-import { parseRecurringPattern } from './recurring';
+import { Task } from './types';
 
 /**
  * Context-Aware Task Suggestion System
@@ -13,6 +11,39 @@ import { parseRecurringPattern } from './recurring';
  * - Recurring task patterns
  * - Dependency analysis
  */
+
+// Helper functions for database access
+async function getRecentTasks(limit: number): Promise<Task[]> {
+  if (typeof window === 'undefined') {
+    try {
+      const Database = require('better-sqlite3');
+      const dbPath = require('path').join(process.cwd(), 'data', 'planner.db');
+      const dbInstance = new Database(dbPath);
+      return dbInstance.prepare(
+        'SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?'
+      ).all(limit) as Task[];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+async function getCompletedTasks(limit: number): Promise<Task[]> {
+  if (typeof window === 'undefined') {
+    try {
+      const Database = require('better-sqlite3');
+      const dbPath = require('path').join(process.cwd(), 'data', 'planner.db');
+      const dbInstance = new Database(dbPath);
+      return dbInstance.prepare(
+        'SELECT * FROM tasks WHERE is_completed = 1 ORDER BY completed_at DESC LIMIT ?'
+      ).all(limit) as Task[];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 export interface SuggestionContext {
   userId?: string;
@@ -150,7 +181,7 @@ function analyzeTaskPatterns(
 function generateTimeBasedSuggestions(
   timeOfDay?: 'morning' | 'afternoon' | 'evening',
   dayOfWeek?: number,
-  recentTasks: Task[]
+  recentTasks?: Task[]
 ): TaskSuggestion[] {
   const suggestions: TaskSuggestion[] = [];
 
@@ -168,18 +199,21 @@ function generateTimeBasedSuggestions(
     });
 
     // Suggest tackling high-priority tasks first
-    const highPriority = recentTasks.filter(t => t.priority === 'high' && t.is_completed === 0);
-    if (highPriority.length > 0) {
-      suggestions.push({
-        taskName: 'Complete high-priority task',
-        description: 'Start with your most important task',
-        estimatedMinutes: highPriority[0]?.estimate_minutes || 60,
-        priority: 'high',
-        relevanceScore: 0.7,
-        reason: 'Complete your most important task early in the day'
-      });
+    if (recentTasks) {
+      const highPriority = recentTasks.filter(t => t.priority === 'high' && t.is_completed === 0);
+      if (highPriority.length > 0) {
+        suggestions.push({
+          taskName: 'Complete high-priority task',
+          description: 'Start with your most important task',
+          estimatedMinutes: highPriority[0]?.estimate_minutes || 60,
+          priority: 'high',
+          relevanceScore: 0.7,
+          reason: 'Complete your most important task early in the day'
+        });
+      }
     }
-  }
+
+  }  // Close the morning if block before afternoon suggestions
 
   // Afternoon suggestions - progress and collaboration
   if (timeOfDay === 'afternoon' || (!timeOfDay && dayOfWeek && dayOfWeek >= 1 && dayOfWeek <= 5)) {
@@ -193,22 +227,24 @@ function generateTimeBasedSuggestions(
     });
 
     // Suggest collaboration tasks
-    const collaborationTasks = recentTasks.filter(t =>
-      t.name.toLowerCase().includes('meeting') ||
-      t.name.toLowerCase().includes('call') ||
-      t.name.toLowerCase().includes('discuss')
-    );
-    if (collaborationTasks.length > 0) {
-      suggestions.push({
-        taskName: 'Schedule collaborative session',
-        description: 'Book time for team collaboration or discussion',
-        estimatedMinutes: 30,
-        priority: 'medium',
-        relevanceScore: 0.5,
-        reason: 'Afternoon is good for team interactions'
-      });
+    if (recentTasks) {
+      const collaborationTasks = recentTasks.filter(t =>
+        t.name.toLowerCase().includes('meeting') ||
+        t.name.toLowerCase().includes('call') ||
+        t.name.toLowerCase().includes('discuss')
+      );
+      if (collaborationTasks.length > 0) {
+        suggestions.push({
+          taskName: 'Schedule collaborative session',
+          description: 'Book time for team collaboration or discussion',
+          estimatedMinutes: 30,
+          priority: 'medium',
+          relevanceScore: 0.5,
+          reason: 'Afternoon is good for team interactions'
+        });
+      }
     }
-  }
+  }  // Close the afternoon if block before evening suggestions
 
   // Evening suggestions - wrap-up and planning
   if (timeOfDay === 'evening' || (!timeOfDay && dayOfWeek && dayOfWeek >= 1 && dayOfWeek <= 5)) {
@@ -360,43 +396,3 @@ function formatDateForTomorrow(): string {
   const tomorrow = new Date(Date.now() + 86400000);
   return tomorrow.toISOString().split('T')[0];
 }
-
-/**
- * Get recent tasks from database
- */
-async function getRecentTasks(limit: number): Promise<Task[]> {
-  if (typeof window === 'undefined') {
-    try {
-      const Database = require('better-sqlite3');
-      const dbPath = require('path').join(process.cwd(), 'data', 'planner.db');
-      const dbInstance = new Database(dbPath);
-      return dbInstance.prepare(
-        'SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?'
-      ).all(limit) as Task[];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-/**
- * Get completed tasks from database
- */
-async function getCompletedTasks(limit: number): Promise<Task[]> {
-  if (typeof window === 'undefined') {
-    try {
-      const Database = require('better-sqlite3');
-      const dbPath = require('path').join(process.cwd(), 'data', 'planner.db');
-      const dbInstance = new Database(dbPath);
-      return dbInstance.prepare(
-        'SELECT * FROM tasks WHERE is_completed = 1 ORDER BY completed_at DESC LIMIT ?'
-      ).all(limit) as Task[];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-export { getTaskSuggestions, SuggestionContext, TaskSuggestion };
