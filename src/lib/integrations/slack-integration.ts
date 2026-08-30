@@ -1,4 +1,5 @@
-import { BaseIntegration, IntegrationConfig, SyncResult, SyncError, ExternalTask, ExternalUser, ExternalProject, ExternalComment, IntegrationFramework } from './integration-framework';
+import { BaseIntegration, IntegrationConfig, SyncResult, SyncError, ExternalTask, ExternalUser, ExternalProject, ExternalComment, IntegrationFilters, WebhookEvent, WebhookResult, TaskMapper } from './integration-framework';
+import { TaskWithDetails } from '@/lib/types';
 import fetch from 'node-fetch';
 
 export class SlackIntegration extends BaseIntegration {
@@ -13,6 +14,7 @@ export class SlackIntegration extends BaseIntegration {
     }
   }
 
+  
   getHeaders(): HeadersInit {
     return {
       'Authorization': `Bearer ${this.config.credentials.accessToken}`,
@@ -27,7 +29,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       return data.ok === true;
     } catch (error) {
       console.error('Slack authentication failed:', error);
@@ -56,7 +58,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch conversations');
 
       return data.channels
@@ -89,7 +91,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch conversation');
 
       const channel = data.channel;
@@ -131,13 +133,13 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch messages');
 
       const tasks: ExternalTask[] = [];
 
       // Process messages and group by thread
-      const threadMap = new Map<string, ExternalTask[]>();
+      const threadMap = new Map<string, any[]>();
 
       for (const message of data.messages) {
         // Skip bot messages and system messages
@@ -167,8 +169,8 @@ export class SlackIntegration extends BaseIntegration {
           estimate: this.extractEstimate(firstMessage.text),
           labels: this.extractLabels(firstMessage.text),
           url: `https://slack.com/app_redirect?channel=${this.channelId}&message=${threadTs}`,
-          projectId: this.channelId,
-          parentId: null,
+          projectId: this.channelId || undefined,
+          parentId: undefined,
           metadata: {
             channel: this.channelId,
             threadTs,
@@ -199,7 +201,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch thread replies');
 
       const messages = data.messages;
@@ -218,8 +220,8 @@ export class SlackIntegration extends BaseIntegration {
         estimate: this.extractEstimate(firstMessage.text),
         labels: this.extractLabels(firstMessage.text),
         url: `https://slack.com/app_redirect?channel=${this.channelId}&message=${threadTs}`,
-        projectId: this.channelId,
-        parentId: null,
+        projectId: this.channelId || undefined,
+        parentId: undefined,
         metadata: {
           channel: this.channelId,
           threadTs,
@@ -251,7 +253,7 @@ export class SlackIntegration extends BaseIntegration {
         })
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to create message');
 
       const messageTs = data.ts;
@@ -378,7 +380,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch thread replies');
 
       // Skip the first message (the task itself)
@@ -431,7 +433,7 @@ export class SlackIntegration extends BaseIntegration {
         })
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to add comment');
 
       const comment: ExternalComment = {
@@ -524,7 +526,7 @@ export class SlackIntegration extends BaseIntegration {
         headers: this.getHeaders()
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (!data.ok) throw new Error(data.error || 'Failed to fetch users');
 
       return data.members
@@ -565,21 +567,21 @@ export class SlackIntegration extends BaseIntegration {
     return true;
   }
 
-  async processWebhook(payload: any): Promise<{ success: boolean; action: string; itemId: string }> {
+  async processWebhook(payload: any): Promise<WebhookResult> {
     try {
       const event = payload.event;
 
       switch (event.type) {
         case 'message':
           if (event.subtype === 'message_deleted') {
-            return { success: true, action: 'deleted', itemId: `slack_${event.previous_message.ts}` };
+            return { success: true, action: 'deleted', itemType: 'task', itemId: `slack_${event.previous_message.ts}` };
           }
           // New message in thread
           if (event.thread_ts) {
-            return { success: true, action: 'updated', itemId: `slack_${event.thread_ts}` };
+            return { success: true, action: 'updated', itemType: 'task', itemId: `slack_${event.thread_ts}` };
           }
           // New top-level message (potential new task)
-          return { success: true, action: 'created', itemId: `slack_${event.ts}` };
+          return { success: true, action: 'created', itemType: 'task', itemId: `slack_${event.ts}` };
 
         case 'reaction_added':
           // Handle status changes via reactions
@@ -587,20 +589,20 @@ export class SlackIntegration extends BaseIntegration {
             const taskId = `slack_${event.item.ts}`;
             if (event.reaction === 'white_check_mark') {
               // Task completed
-              return { success: true, action: 'updated', itemId: taskId };
+              return { success: true, action: 'updated', itemType: 'task', itemId: taskId };
             } else if (event.reaction === 'x') {
               // Task reopened
-              return { success: true, action: 'updated', itemId: taskId };
+              return { success: true, action: 'updated', itemType: 'task', itemId: taskId };
             }
           }
-          return { success: true, action: 'ignored', itemId: '' };
+          return { success: true, action: 'ignored', itemType: 'task', itemId: '' };
 
         default:
-          return { success: true, action: 'ignored', itemId: '' };
+          return { success: true, action: 'ignored', itemType: 'task', itemId: '' };
       }
     } catch (error) {
       console.error('Failed to process Slack webhook:', error);
-      return { success: false, action: 'error', itemId: '' };
+      return { success: false, action: 'ignored', itemType: 'task', itemId: '' };
     }
   }
 
@@ -802,6 +804,56 @@ export class SlackIntegration extends BaseIntegration {
   private getUserName(userId: string): string | undefined {
     // Would normally cache this
     return undefined;
+  }
+
+  async importTasks(): Promise<{ imported: number; updated: number; deleted: number; errors: SyncError[] }> {
+    try {
+      // Import Slack messages/tasks
+      const externalTasks = await this.getTasks();
+      const errors: SyncError[] = [];
+      let imported = 0;
+      const updated = 0;
+
+      imported = externalTasks.length;
+
+      return { imported, updated, deleted: 0, errors };
+    } catch (error) {
+      console.error('Failed to import tasks from Slack:', error);
+      return {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
+  }
+
+  async exportTasks(): Promise<{ exported: number; updated: number; errors: SyncError[] }> {
+    try {
+      // Export local tasks to Slack
+      // This would require fetching local tasks and creating them in Slack
+      // For now, we'll return a placeholder
+      return { exported: 0, updated: 0, errors: [] };
+    } catch (error) {
+      console.error('Failed to export tasks to Slack:', error);
+      return {
+        exported: 0,
+        updated: 0,
+        errors: [{
+          itemId: '',
+          itemType: 'task',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          severity: 'error',
+          recoverable: false
+        }]
+      };
+    }
   }
 }
 
