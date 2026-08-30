@@ -40,7 +40,7 @@ export interface ConflictEvent {
     resourceId?: string;
     phase?: string;
     timestamp: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   };
   priority: number; // 1-10, higher = more urgent
   severity: 'low' | 'medium' | 'high' | 'critical';
@@ -50,10 +50,26 @@ export interface ConflictEvent {
   resolution?: {
     strategy: ResolutionStrategy;
     outcome: 'success' | 'partial' | 'failure';
-    details?: any;
+    details?: ResolutionDetails | null;
     winner?: string; // for lock_winner strategy
-    merged_data?: any; // for context_merge strategy
+    merged_data?: MergedContextData | null; // for context_merge strategy
   };
+}
+
+export interface ResolutionDetails {
+  reason?: string;
+  agentsConsidered?: string[];
+  votes?: Record<string, boolean>;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
+export interface MergedContextData {
+  merged_from: string[];
+  merge_timestamp: number;
+  data_sources: Array<{ agentId: string; timestamp: number }>;
+  strategy: string;
+  [key: string]: unknown;
 }
 
 export interface ConflictArbiterConfig {
@@ -178,9 +194,9 @@ class ConflictArbiterImpl {
 
     let success = false;
     let outcome: 'success' | 'partial' | 'failure' = 'failure';
-    let details: any = null;
+    const details: ResolutionDetails | null = null;
     let winner: string | undefined;
-    let mergedData: any = undefined;
+    let mergedData: MergedContextData | undefined = undefined;
 
     switch (resolutionStrategy) {
       case 'LOCK_WINNER':
@@ -428,7 +444,7 @@ class ConflictArbiterImpl {
   /**
    * Emit event
    */
-  emit(event: string, data?: any): void {
+  emit(event: string, data?: unknown): void {
     this.state.listeners.emit(event, data);
   }
 
