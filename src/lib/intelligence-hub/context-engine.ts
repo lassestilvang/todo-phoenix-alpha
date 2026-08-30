@@ -1,5 +1,4 @@
-import { db } from '@/lib/db/schema';
-import { User, Task, TaskWithDetails } from '@/lib/types';
+import { Task, TaskWithDetails } from '@/lib/types';
 import { taskOperations } from '@/lib/db/tasks';
 import { listOperations } from '@/lib/db/lists';
 import { labelOperations } from '@/lib/db/labels';
@@ -53,7 +52,7 @@ export class ContextEngine {
   /**
    * Get user basic data from system
    */
-  private async getUserData(userId: string): Promise<User> {
+  private async getUserData(userId: string): Promise<any> {
     // In production, this would fetch from auth system
     // For now, return default user data
     return {
@@ -150,7 +149,7 @@ export class ContextEngine {
 
     // Completion rate
     const totalTasks = allTasks.length;
-    const completedTasks = allTasks.filter(t => t.isCompleted).length;
+    const completedTasks = allTasks.filter(t => t.is_completed === 1).length;
     const completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
 
     // Most productive hours from time entries
@@ -213,8 +212,8 @@ export class ContextEngine {
   private calculateCurrentStreak(tasks: TaskWithDetails[]): number {
     // Get completed tasks sorted by completion date
     const completed = tasks
-      .filter(t => t.isCompleted)
-      .sort((a, b) => new Date(b.completed_at || b.updated_at).getTime() - new Date(a.completed_at || a.updated_at).getTime());
+      .filter(t => t.is_completed === 1)
+      .sort((a, b) => new Date(b.updated_at || b.updated_at).getTime() - new Date(a.updated_at || a.updated_at).getTime());
 
     if (completed.length === 0) return 0;
 
@@ -224,7 +223,7 @@ export class ContextEngine {
 
     // Check consecutive days of task completion
     for (let i = completed.length - 1; i >= 0; i--) {
-      const completedDate = new Date(completed[i].completed_at || completed[i].updated_at);
+      const completedDate = new Date(completed[i].updated_at || completed[i].updated_at);
       completedDate.setHours(0, 0, 0, 0);
 
       const diffDays = Math.floor(
@@ -276,7 +275,7 @@ export class ContextEngine {
     let overdueCount = 0;
 
     tasks.forEach(task => {
-      if (task.deadline && !task.isCompleted) {
+      if (task.deadline && task.is_completed !== 1) {
         const deadline = new Date(task.deadline);
         if (deadline < now) {
           overdueCount++;
@@ -301,7 +300,7 @@ export class ContextEngine {
       meetingEffectiveness: 0.5,
       activeProjects: [],
       productiveHours: [],
-      timeOfDay: 'unknown',
+      timeOfDay: this.getTimeOfDay(),
       dayOfWeek: new Date().getDay()
     };
   }
@@ -310,7 +309,7 @@ export class ContextEngine {
    * Construct the full UserContext object from all data sources
    */
   private constructUserContext(
-    userData: User,
+    userData: any,
     recentTasks: TaskWithDetails[],
     allTasks: TaskWithDetails[],
     timeEntries: any[],
@@ -348,8 +347,8 @@ export class ContextEngine {
     const projectIds = new Set<string>();
 
     tasks.forEach(task => {
-      if (task.projectIds && Array.isArray(task.projectIds)) {
-        task.projectIds.forEach((id: string) => projectIds.add(id));
+      if (task.projects && Array.isArray(task.projects)) {
+        task.projects.forEach((p) => projectIds.add(String(p.id)));
       }
       // Also check list_id as a project indicator
       if (task.list_id) {
