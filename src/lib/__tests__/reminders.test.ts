@@ -156,39 +156,17 @@ describe('Reminder Management', () => {
     })
   })
 
-  describe('getTodayReminders', () => {
-    it('should return today\'s reminders', async () => {
-      const { createReminder } = await import('@/app/actions/tasks')
-      await createReminder(1, new Date())
-
-      const { getTodayReminders } = await import('@/app/actions/tasks')
-      const result = await getTodayReminders()
+  describe('getPendingReminders', () => {
+    it('should return pending reminders', async () => {
+      const { getPendingReminders } = await import('@/app/actions/tasks')
+      const result = await getPendingReminders()
 
       expect(Array.isArray(result)).toBe(true)
     })
 
-    it('should return empty when no today reminders exist', async () => {
-      const { getTodayReminders } = await import('@/app/actions/tasks')
-      const result = await getTodayReminders()
-
-      expect(result).toHaveLength(0)
-    })
-  })
-
-  describe('getOverdueReminders', () => {
-    it('should return overdue reminders', async () => {
-      const { createReminder } = await import('@/app/actions/tasks')
-      await createReminder(1, new Date())
-
-      const { getOverdueReminders } = await import('@/app/actions/tasks')
-      const result = await getOverdueReminders()
-
-      expect(Array.isArray(result)).toBe(true)
-    })
-
-    it('should return empty when no overdue reminders exist', async () => {
-      const { getOverdueReminders } = await import('@/app/actions/tasks')
-      const result = await getOverdueReminders()
+    it('should return empty when no pending reminders exist', async () => {
+      const { getPendingReminders } = await import('@/app/actions/tasks')
+      const result = await getPendingReminders()
 
       expect(result).toHaveLength(0)
     })
