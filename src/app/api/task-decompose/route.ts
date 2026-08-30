@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     // Get smart suggestions for the task
     const smartSuggestions = TaskDecomposer.smartSuggestions(taskText);
 
-    let formattedSubtasks = decomposition.subtasks.map((subtask) => ({
+    const formattedSubtasks = decomposition.subtasks.map((subtask) => ({
       name: subtask.name,
       description: subtask.description,
       priority: subtask.priority,
