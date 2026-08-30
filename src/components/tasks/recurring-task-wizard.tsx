@@ -61,7 +61,7 @@ export function RecurringTaskWizard({
 
   const generateOccurrences = (): Date[] => {
     const dates: Date[] = []
-    let current = new Date(pattern.startDate)
+    const current = new Date(pattern.startDate)
     current.setHours(0, 0, 0, 0)
 
     const count = pattern.showOccurrences ? 10 : 0
