@@ -1,5 +1,74 @@
 import db from './db/schema';
-import { Task, TaskWithDetails, User } from './types';
+import { Task, TaskWithDetails } from './types';
+
+// Extended User type for collaboration
+// Helper functions used by collaborationOperations
+const createNotification = (notification: {
+  userId: string;
+  type: string;
+  content: string;
+  relatedId?: number;
+  actionUrl?: string;
+}) => {
+  const result = db.prepare(
+    `INSERT INTO notifications (
+      user_id, type, content, related_id, action_url
+    ) VALUES (?, ?, ?, ?, ?)`
+  ).run(
+    notification.userId,
+    notification.type,
+    notification.content,
+    notification.relatedId || null,
+    notification.actionUrl || null
+  );
+
+  return {
+    ...notification,
+    id: result.lastInsertRowid as number,
+    isRead: false,
+    createdAt: new Date().toISOString()
+  };
+};
+
+const createActivity = (activity: {
+  userId: string;
+  action: string;
+  entityType: string;
+  entityId: number;
+  entityName: string;
+  changes?: any;
+  metadata?: any;
+}) => {
+  const result = db.prepare(
+    `INSERT INTO activities (
+      user_id, action, entity_type, entity_id, entity_name, changes, metadata
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    activity.userId,
+    activity.action,
+    activity.entityType,
+    activity.entityId,
+    activity.entityName,
+    JSON.stringify(activity.changes || []),
+    JSON.stringify(activity.metadata || {})
+  );
+
+  return {
+    ...activity,
+    id: result.lastInsertRowid as number,
+    createdAt: new Date().toISOString()
+  };
+};
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: Date;
+  preferences: Record<string, any>;
+  settings: Record<string, any>;
+}
 
 /**
  * Collaboration and communication system for task management
@@ -179,7 +248,7 @@ export const collaborationOperations = {
         createNotification({
           userId,
           type: 'mention',
-          content: `mentioned you in comment on task #${comment.taskId}`,,
+          content: `mentioned you in comment on task #${comment.taskId}`,
           relatedId: comment.taskId,
           actionUrl: `/tasks/${comment.taskId}?comment=${commentId}`
         });
@@ -284,7 +353,7 @@ export const collaborationOperations = {
     createNotification({
       userId: assignedTo,
       type: 'assignment',
-      content: `You have been assigned to task #${taskId}`,,
+      content: `You have been assigned to task #${taskId}`,
       relatedId: taskId,
       actionUrl: `/tasks/${taskId}`
     });
@@ -372,7 +441,7 @@ export const collaborationOperations = {
     createNotification({
       userId: workflow.requestedBy,
       type: 'status-change',
-      content: `Approval workflow "${workflow.name}" ${decision}`,,
+      content: `Approval workflow "${workflow.name}" ${decision}`,
       relatedId: workflowId,
       actionUrl: `/approvals/${workflowId}`
     });
@@ -530,5 +599,3 @@ const initCollaborationDatabase = () => {
 
 // Initialize collaboration database
 initCollaborationDatabase();
-
-export { collaborationOperations };
