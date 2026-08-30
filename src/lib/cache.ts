@@ -1,113 +1,108 @@
-/**
- * Simple LRU (Least Recently Used) cache implementation for server-side query caching.
- * This helps optimize frequently accessed data like user task statistics,
- * upcoming deadlines, and productivity insights.
- */
-class LRUCache<K, V> {
-  private cache: Map<K, V>;
-  private maxSize: number;
+import db from './db/schema';
 
-  constructor(maxSize: number = 100) {
-    this.cache = new Map();
-    this.maxSize = maxSize;
+// Simple in-memory cache for frequently accessed data
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+class DataCache {
+  private cache: Map<string, CacheEntry<any>> = new Map();
+  private defaultTTL = 60000; // 1 minute default TTL
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    // Clean up expired entries every 5 minutes
+    this.cleanupInterval = setInterval(() => this.cleanup(), 300000);
   }
 
-  get(key: K): V | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Move to end (most recently used)
+  set<T>(key: string, data: T, ttl?: number): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl: ttl || this.defaultTTL
+    });
+  }
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
-      this.cache.set(key, value);
+      return null;
     }
-    return value;
+
+    return entry.data as T;
   }
 
-  set(key: K, value: V): void {
-    // Remove oldest item if at capacity
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+
+  invalidatePattern(pattern: string): void {
+    const regex = new RegExp(pattern.replace('*', '.*'));
+    for (const key of this.cache.keys()) {
+      if (regex.test(key)) {
+        this.cache.delete(key);
       }
     }
-    this.cache.set(key, value);
   }
 
-  keys(): IterableIterator<K> {
-    return this.cache.keys();
+  private cleanup(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key);
+      }
+    }
   }
 
-  has(key: K): boolean {
-    return this.cache.has(key);
-  }
-
-  delete(key: K): boolean {
-    return this.cache.delete(key);
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  get size(): number {
-    return this.cache.size;
+  getStats(): { size: number; keys: string[] } {
+    return {
+      size: this.cache.size,
+      keys: Array.from(this.cache.keys())
+    };
   }
 }
 
-// Cache instances with TTL-like behavior (cleared manually for simplicity)
-export const cacheRegistry = {
-  taskStats: new LRUCache<number, any>(500), // Cache per task ID
-  upcomingTasks: new LRUCache<string, any>(10), // Cache per date string
-  productivityInsights: new LRUCache<string, any>(5), // Cache per user
-  aiSuggestions: new LRUCache<number, any>(100), // Cache per task suggestion
-};
+// Export singleton cache instance
+export const dataCache = new DataCache();
 
-// Helper function to invalidate cache entries
-export function invalidateCache(pattern?: RegExp): void {
-  if (pattern) {
-    // Invalidate cache keys matching the pattern - handle each cache type explicitly
-    for (const key of cacheRegistry.taskStats.keys()) {
-      if (pattern.test(String(key))) {
-        cacheRegistry.taskStats.delete(key);
-      }
-    }
-    for (const key of cacheRegistry.upcomingTasks.keys()) {
-      if (pattern.test(String(key))) {
-        cacheRegistry.upcomingTasks.delete(key);
-      }
-    }
-    for (const key of cacheRegistry.productivityInsights.keys()) {
-      if (pattern.test(String(key))) {
-        cacheRegistry.productivityInsights.delete(key);
-      }
-    }
-    for (const key of cacheRegistry.aiSuggestions.keys()) {
-      if (pattern.test(String(key))) {
-        cacheRegistry.aiSuggestions.delete(key);
-      }
-    }
-  } else {
-    // Clear all caches
-    cacheRegistry.taskStats.clear();
-    cacheRegistry.upcomingTasks.clear();
-    cacheRegistry.productivityInsights.clear();
-    cacheRegistry.aiSuggestions.clear();
-  }
+// Cache keys for different data types
+export const CacheKeys = {
+  lists: 'lists',
+  labels: 'labels',
+  tasks: 'tasks',
+  taskById: (id: number) => `task:${id}`,
+  tasksByList: (listId: number) => `tasks:list:${listId}`,
+  tasksByDate: (date: string) => `tasks:date:${date}`,
+  upcomingTasks: (date: string) => `tasks:upcoming:${date}`,
+  overdueTasks: (date: string) => `tasks:overdue:${date}`,
+  attachments: (taskId: number) => `attachments:${taskId}`,
+  reminders: 'reminders:pending',
+  stats: 'stats'
+} as const;
+
+// Helper functions for common cached queries
+export function getCachedLists(): any[] | null {
+  return dataCache.get(CacheKeys.lists);
 }
 
-// Helper function to get or set cache value
-export function getOrCreateCache<K, V>(
-  cache: LRUCache<K, V>,
-  key: K,
-  factory: () => V
-): V {
-  const cached = cache.get(key);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const value = factory();
-  cache.set(key, value);
-  return value;
+export function setCachedLists(lists: any[]): void {
+  dataCache.set(CacheKeys.lists, lists, 30000); // 30 second TTL for lists
 }
 
-export default LRUCache;
+export function getCachedTaskById(id: number): any | null {
+  return dataCache.get(CacheKeys.taskById(id));
+}
+
+export function setCachedTaskById(id: number, task: any): void {
+  dataCache.set(CacheKeys.taskById(id), task, 30000);
+}
+
+export function invalidateTaskCache(taskId: number): void {
+  dataCache.invalidate(CacheKeys.taskById(taskId));
+  dataCache.invalidatePattern('tasks:*');
+}
