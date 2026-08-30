@@ -349,7 +349,7 @@ export class AuditLogger {
     } = {}
   ): AuditLogEntry[] {
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (options.userId) {
       conditions.push('user_id = ?');
@@ -412,7 +412,7 @@ export class AuditLogger {
     anomalies: number;
   } {
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (options.userId) {
       conditions.push('user_id = ?');
@@ -566,7 +566,7 @@ export class AuditLogger {
 export const auditLogger = AuditLogger.getInstance();
 
 // Helper functions for common logging patterns
-export function logTaskCreated(taskId: number, taskData: any, userId?: string): void {
+export function logTaskCreated(taskId: number, taskData: Record<string, unknown>, userId?: string): void {
   auditLogger.log({
     action: 'task_created',
     tableName: 'tasks',
@@ -577,7 +577,7 @@ export function logTaskCreated(taskId: number, taskData: any, userId?: string): 
   });
 }
 
-export function logTaskUpdated(taskId: number, oldData: any, newData: any, userId?: string): void {
+export function logTaskUpdated(taskId: number, oldData: Record<string, unknown>, newData: Record<string, unknown>, userId?: string): void {
   auditLogger.log({
     action: 'task_updated',
     tableName: 'tasks',
