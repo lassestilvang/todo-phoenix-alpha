@@ -181,6 +181,108 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reminders_task_id ON reminders(task_id);
   CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time);
   CREATE INDEX IF NOT EXISTS idx_time_entries_task_id ON time_entries(task_id);
+
+  -- Composite indexes for common query patterns
+  CREATE INDEX IF NOT EXISTS idx_tasks_list_completed ON tasks(list_id, is_completed);
+  CREATE INDEX IF NOT EXISTS idx_tasks_list_date ON tasks(list_id, date);
+  CREATE INDEX IF NOT EXISTS idx_tasks_list_priority ON tasks(list_id, priority);
+  CREATE INDEX IF NOT EXISTS idx_tasks_date_completed ON tasks(date, is_completed);
+  CREATE INDEX IF NOT EXISTS idx_tasks_priority_date ON tasks(priority, date);
+  CREATE INDEX IF NOT EXISTS idx_tasks_created_completed ON tasks(created_at, is_completed);
+
+  -- New composite indexes for recent features
+  CREATE INDEX IF NOT EXISTS idx_attachments_task_id ON attachments(task_id);
+  CREATE INDEX IF NOT EXISTS idx_reminders_time_sent ON reminders(time, is_sent);
+  CREATE INDEX IF NOT EXISTS idx_time_entries_task_date ON time_entries(task_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_notifications_task_user ON notifications(task_id, user_id, is_read);
+  CREATE INDEX IF NOT EXISTS idx_time_tracking_snapshots_task ON time_tracking_snapshots(task_id, is_running);
+
+  -- Collaboration tables
+  CREATE TABLE IF NOT EXISTS collaboration_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    task_id INTEGER NOT NULL,
+    session_type TEXT NOT NULL,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME,
+    participants TEXT, -- JSON array of user IDs
+    status TEXT DEFAULT 'active',
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS brainstorm_ideas (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    votes INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    tags TEXT, -- JSON array
+    parent_id TEXT,
+    FOREIGN KEY (session_id) REFERENCES collaboration_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS collaboration_comments (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    mentions TEXT, -- JSON array of user IDs
+    reactions TEXT, -- JSON object
+    FOREIGN KEY (session_id) REFERENCES collaboration_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS consensus_results (
+    id TEXT PRIMARY KEY,
+    idea_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    agreement_level INTEGER DEFAULT 0,
+    supporting_votes INTEGER DEFAULT 0,
+    opposing_votes INTEGER DEFAULT 0,
+    abstentions INTEGER DEFAULT 0,
+    final_decision TEXT,
+    reasoning TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (idea_id) REFERENCES brainstorm_ideas(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES collaboration_sessions(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_collaboration_sessions_task ON collaboration_sessions(task_id);
+  CREATE INDEX IF NOT EXISTS idx_collaboration_sessions_status ON collaboration_sessions(status);
+  CREATE INDEX IF NOT EXISTS idx_brainstorm_ideas_session ON brainstorm_ideas(session_id);
+  CREATE INDEX IF NOT EXISTS idx_brainstorm_ideas_votes ON brainstorm_ideas(votes);
+  CREATE INDEX IF NOT EXISTS idx_collaboration_comments_session ON collaboration_comments(session_id);
+  CREATE INDEX IF NOT EXISTS idx_consensus_results_idea ON consensus_results(idea_id);
+
+  -- Recommender tables
+  CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id TEXT PRIMARY KEY,
+    preferences_json TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS task_recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    task_id INTEGER NOT NULL,
+    recommendation_type TEXT NOT NULL,
+    confidence INTEGER DEFAULT 50,
+    reason TEXT,
+    shown_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    clicked_at DATETIME,
+    completed_at DATETIME,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_task_recommendations_user ON task_recommendations(user_id);
+  CREATE INDEX IF NOT EXISTS idx_task_recommendations_shown ON task_recommendations(shown_at);
+  CREATE INDEX IF NOT EXISTS idx_task_recommendations_confidence ON task_recommendations(confidence);
 `);
 
 // Create default Inbox list if it doesn't exist
