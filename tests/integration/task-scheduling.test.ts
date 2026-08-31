@@ -18,17 +18,17 @@ import { getScheduler } from '@/lib/scheduler';
 
 // Mock WebSocket for tests
 beforeAll(() => {
-  global.WebSocket = class MockWebSocket {
+  (global as any).WebSocket = class MockWebSocket {
     static CONNECTING = 0;
     static OPEN = 1;
     static CLOSING = 2;
     static CLOSED = 3;
-    readyState = MockWebSocket.OPEN;
+    readyState = (MockWebSocket as any).OPEN;
     url = '';
     addEventListener() {}
     removeEventListener() {}
     send() {}
-    close() { this.readyState = MockWebSocket.CLOSED; }
+    close() { (this as any).readyState = (MockWebSocket as any).CLOSED; }
     dispatchEvent() { return true; }
   };
 });
