@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IntegrationFactory, IntegrationRegistry, IntegrationManager, IntegrationConfig, IntegrationType } from '@/lib/integrations/integration-framework';
 import { SlackIntegration } from '@/lib/integrations/slack-integration';
 import { GitHubIntegration } from '@/lib/integrations/github-integration';
@@ -242,7 +243,6 @@ describe('Integration Framework', () => {
       const config: IntegrationConfig = {
         id: 'test_integration',
         name: 'Test Integration',
-        type: 'slack': 'test_integration',
         type: 'slack',
         enabled: true,
         credentials: { accessToken: 'xoxb-test-token' },
