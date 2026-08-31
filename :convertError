@@ -1,0 +1,58 @@
+npm notice run todo-phoenix-alpha@0.1.0 npx
+npm notice run todo-phoenix-alpha@0.1.0 npx
+npm notice run 'vitest' run tests/integration/integration-framework.test.ts
+npm notice run 'vitest' run tests/integration/integration-framework.test.ts
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+(node:49159) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:49159) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/integration-framework.test.ts [ tests/integration/integration-framework.test.ts ]
+ FAIL  tests/integration/integration-framework.test.ts [ tests/integration/integration-framework.test.ts ]
+Error: Transform failed with 1 error:
+/Users/lasse/Sites/todo-phoenix-alpha/tests/integration/integration-framework.test.ts:6:69: ERROR: Unterminated string literal
+Error: Transform failed with 1 error:
+/Users/lasse/Sites/todo-phoenix-alpha/tests/integration/integration-framework.test.ts:6:69: ERROR: Unterminated string literal
+  Plugin: vite:esbuild
+  File: /Users/lasse/Sites/todo-phoenix-alpha/tests/integration/integration-framework.test.ts:6:69
+  
+  Unterminated string literal
+  4  |  import { GitHubIntegration } from '@/lib/integrations/github-integration';
+  5  |  import { GoogleCalendarIntegration } from '@/lib/integrations/google-calendar-integration';
+  6  |  import { JiraIntegration } from '@/lib/integrations/jira-integration;
+     |                                                                       ^
+  7  |  import { TeamsIntegration } from '@/lib/integrations/teams-integration;
+  8  |  import { NotionIntegration } from '@/lib/integrations/notion-integration;
+  
+  Plugin: vite:esbuild
+  File: /Users/lasse/Sites/todo-phoenix-alpha/tests/integration/integration-framework.test.ts:6:69
+  
+  Unterminated string literal
+  4  |  import { GitHubIntegration } from '@/lib/integrations/github-integration';
+  5  |  import { GoogleCalendarIntegration } from '@/lib/integrations/google-calendar-integration';
+  6  |  import { JiraIntegration } from '@/lib/integrations/jira-integration;
+     |                                                                       ^
+  7  |  import { TeamsIntegration } from '@/lib/integrations/teams-integration;
+  8  |  import { NotionIntegration } from '@/lib/integrations/notion-integration;
+  
+ ❯ failureErrorWithLog node_modules/esbuild/lib/main.js:1472:15
+ ❯ node_modules/esbuild/lib/main.js:755:50
+ ❯ failureErrorWithLog node_modules/esbuild/lib/main.js:1472:15
+ ❯ node_modules/esbuild/lib/main.js:755:50
+ ❯ responseCallbacks.<computed> node_modules/esbuild/lib/main.js:622:9
+ ❯ handleIncomingPacket node_modules/esbuild/lib/main.js:677:12
+ ❯ responseCallbacks.<computed> node_modules/esbuild/lib/main.js:622:9
+ ❯ handleIncomingPacket node_modules/esbuild/lib/main.js:677:12
+ ❯ Socket.readFromStdout node_modules/esbuild/lib/main.js:600:7
+ ❯ Socket.readFromStdout node_modules/esbuild/lib/main.js:600:7
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
