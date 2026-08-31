@@ -14,17 +14,19 @@ const STATIC_ASSETS = [
   '/manifest.json',
 ]
 
-self.addEventListener('install', (event: ExtendableEvent) => {
+const swSelf = self as unknown as ServiceWorkerGlobalScope
+
+swSelf.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS.map((asset: string) => new Request(asset, { cache: 'reload' })))
     })
   )
   // Skip waiting so the active worker takes control immediately
-  self.skipWaiting()
+  swSelf.skipWaiting()
 })
 
-self.addEventListener('activate', (event: ExtendableEvent) => {
+swSelf.addEventListener('activate', (event: ExtendableEvent) => {
   event.waitUntil(
     caches.keys().then((cacheNames: string[]) => {
       return Promise.all(
@@ -37,16 +39,18 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
     })
   )
   // Claim all clients so the SW controls the page immediately
-  event.waitUntil(clients.claim())
+  event.waitUntil(
+    (swSelf.clients as unknown as { claim: () => Promise<void> }).claim()
+  )
 })
 
-self.addEventListener('fetch', (event: FetchEvent) => {
+swSelf.addEventListener('fetch', (event: FetchEvent) => {
   const request = event.request
 
   // Only handle same-origin GET requests
   if (
     request.method !== 'GET' ||
-    !request.url.startsWith(self.location.origin)
+    !request.url.startsWith(swSelf.location.origin)
   ) {
     return
   }
@@ -91,8 +95,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
           if (request.headers.get('Accept')?.includes('text/html')) {
             return caches.match('/offline')
           }
+          // Return a default offline response
+          return new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
         })
-      })
+      }) as Promise<Response>
     )
   }
 })
