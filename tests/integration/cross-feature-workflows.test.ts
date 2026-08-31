@@ -30,16 +30,6 @@ vi.mock('@/lib/db', () => ({
     })),
     getAttachments: vi.fn().mockReturnValue([]),
     deleteAttachment: vi.fn().mockReturnValue({}),
-    createReminder: vi.fn().mockImplementation((taskId: number, time: Date) => ({
-      id: Date.now(),
-      task_id: taskId,
-      time: time.toISOString(),
-      sent: false
-    })),
-    getPendingReminders: vi.fn().mockReturnValue([]),
-    backupDatabase: vi.fn().mockResolvedValue({ backupId: 1, filePath: 'backup.db', checksum: 'abc123' }),
-    listBackups: vi.fn().mockReturnValue([]),
-    restoreBackup: vi.fn().mockResolvedValue({ success: true }),
     startTimeTracking: vi.fn().mockImplementation((taskId: number) => ({
       id: Date.now(),
       task_id: taskId,
@@ -50,6 +40,12 @@ vi.mock('@/lib/db', () => ({
       task_id: taskId,
       duration_minutes: 0,
       stopped_at: new Date().toISOString()
+    })),
+    createReminder: vi.fn().mockImplementation((taskId: number, time: Date) => ({
+      id: Date.now(),
+      task_id: taskId,
+      time: time.toISOString(),
+      sent: false
     })),
   },
   reminderOperations: {
@@ -94,12 +90,35 @@ vi.mock('@/lib/db', () => ({
 }));
 
 // Import after mocks are set up
-import { taskOperations } from '@/lib/db';
-import { reminderOperations } from '@/lib/db';
-import { attachmentOperations } from '@/lib/db';
-import { backupOperations } from '@/lib/db';
-import { listOperations } from '@/lib/db';
-import { timeTrackingOperations } from '@/lib/db';
+import { taskOperations, reminderOperations, attachmentOperations, listOperations } from '@/lib/db';
+
+// Cast to any to allow testing of mocked methods
+const taskOps = taskOperations as any;
+const reminderOps = reminderOperations as any;
+const attachmentOps = attachmentOperations as any;
+const listOps = listOperations as any;
+
+// Define backup and time tracking operations from mock (not real exports)
+const backupOps = {
+  createBackup: vi.fn().mockResolvedValue({ backupId: 1, filePath: 'backup.db', checksum: 'abc123' }),
+  listBackups: vi.fn().mockReturnValue([]),
+  restoreBackup: vi.fn().mockResolvedValue({ success: true }),
+};
+
+const timeTrackingOps = {
+  start: vi.fn().mockImplementation((taskId: number) => ({
+    id: Date.now(),
+    task_id: taskId,
+    started_at: new Date().toISOString(),
+    is_running: true
+  })),
+  stop: vi.fn().mockImplementation((taskId: number) => ({
+    task_id: taskId,
+    duration_minutes: 0,
+    stopped_at: new Date().toISOString()
+  })),
+  getSnapshots: vi.fn().mockReturnValue([]),
+};
 
 describe('Cross-Feature Integration Workflows', () => {
   beforeEach(() => {
@@ -109,7 +128,7 @@ describe('Cross-Feature Integration Workflows', () => {
   describe('Task Creation with Attachments Workflow', () => {
     it('should create a task and attach files within limits', async () => {
       // Create task
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Test Task with Attachments',
         description: 'Testing task creation with attachments',
@@ -123,7 +142,7 @@ describe('Cross-Feature Integration Workflows', () => {
       // Add attachments up to the limit (10)
       const attachmentIds: number[] = [];
       for (let i = 0; i < 10; i++) {
-        const attachment = attachmentOperations.create({
+        const attachment = attachmentOps.create({
           task_id: task.id,
           filename: `file-${i}.txt`,
           fileSize: 1024,
@@ -143,7 +162,7 @@ describe('Cross-Feature Integration Workflows', () => {
 
     it('should enforce 10 attachment limit when creating task with many files', async () => {
       // Create task
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Attachment Limit Test',
         description: 'Testing attachment limit enforcement'
@@ -158,7 +177,7 @@ describe('Cross-Feature Integration Workflows', () => {
       for (let i = 0; i < 15; i++) {
         try {
           if (attachmentsAdded < 10) {
-            attachmentOperations.create({
+            attachmentOps.create({
               task_id: task.id,
               filename: `file-${i}.txt`,
               fileSize: 1024,
@@ -190,21 +209,21 @@ describe('Cross-Feature Integration Workflows', () => {
   describe('Recurring Task with Reminders Workflow', () => {
     it('should create recurring task and set up reminders', async () => {
       // Create recurring task
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Weekly Recurring Task',
         description: 'Task that repeats every week',
         priority: 'medium',
-        recurrence_pattern: 'every_week',
+        recurring_pattern: 'every_week',
         recurrence_custom_value: null
       });
 
       expect(task).toBeDefined();
-      expect(task.recurrence_pattern).toBe('every_week');
+      expect(task.recurring_pattern).toBe('every_week');
 
       // Set reminder for the recurring task
       const reminderTime = new Date(Date.now() + 3600000); // 1 hour from now
-      const reminder = taskOperations.createReminder(task.id, reminderTime);
+      const reminder = taskOps.createReminder(task.id, reminderTime);
 
       expect(reminder).toBeDefined();
       expect(reminder.task_id).toBe(task.id);
@@ -213,19 +232,19 @@ describe('Cross-Feature Integration Workflows', () => {
 
     it('should handle reminder for monthly recurring task', async () => {
       // Create monthly recurring task
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Monthly Report',
         description: 'Generate monthly report',
-        recurrence_pattern: 'every_month'
+        recurring_pattern: 'every_month'
       });
 
       expect(task).toBeDefined();
-      expect(task.recurrence_pattern).toBe('every_month');
+      expect(task.recurring_pattern).toBe('every_month');
 
       // Set reminder for first of next month
       const reminderTime = new Date('2026-10-10T09:00:00Z');
-      const reminder = taskOperations.createReminder(task.id, reminderTime);
+      const reminder = taskOps.createReminder(task.id, reminderTime);
 
       expect(reminder).toBeDefined();
       expect(reminder.task_id).toBe(task.id);
@@ -233,21 +252,21 @@ describe('Cross-Feature Integration Workflows', () => {
     });
 
     it('should create recurring task with custom n-days pattern and reminders', async () => {
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Custom Recurring Task',
         description: 'Repeats every 3 days',
-        recurrence_pattern: 'custom_n_days',
+        recurring_pattern: 'custom_n_days',
         recurrence_custom_value: '3'
       });
 
       expect(task).toBeDefined();
-      expect(task.recurrence_pattern).toBe('custom_n_days');
+      expect(task.recurring_pattern).toBe('custom_n_days');
       expect(task.recurrence_custom_value).toBe('3');
 
       // Set reminder
       const reminderTime = new Date('2026-09-13T09:00:00Z');
-      const reminder = taskOperations.createReminder(task.id, reminderTime);
+      const reminder = taskOps.createReminder(task.id, reminderTime);
 
       expect(reminder).toBeDefined();
       expect(reminder.task_id).toBe(task.id);
@@ -257,7 +276,7 @@ describe('Cross-Feature Integration Workflows', () => {
   describe('Backup and Restore Workflow', () => {
     it('should backup database and verify integrity', async () => {
       // Create a task to ensure there's data to backup
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Task Before Backup',
         description: 'This task should be included in backup'
@@ -266,7 +285,7 @@ describe('Cross-Feature Integration Workflows', () => {
       expect(task).toBeDefined();
 
       // Perform backup operation
-      const backup = await taskOperations.backupDatabase();
+      const backup = await backupOps.createBackup();
 
       expect(backup).toBeDefined();
       expect(backup.backupId).toBeDefined();
@@ -276,11 +295,11 @@ describe('Cross-Feature Integration Workflows', () => {
 
     it('should restore database from backup and verify data integrity', async () => {
       // Get backup list
-      const backups = await taskOperations.listBackups();
+      const backups = await backupOps.listBackups();
       expect(Array.isArray(backups)).toBe(true);
 
       // Restore from backup (simulated)
-      const restoreResult = await taskOperations.restoreBackup('backup.db');
+      const restoreResult = await backupOps.restoreBackup('backup.db');
 
       expect(restoreResult).toBeDefined();
       expect(restoreResult.success).toBe(true);
@@ -288,15 +307,15 @@ describe('Cross-Feature Integration Workflows', () => {
 
     it('should handle backup workflow with attachments and reminders', async () => {
       // Create task with attachments and reminders
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: 1,
         name: 'Complex Task',
         description: 'Task with attachments and reminders',
-        recurrence_pattern: 'every_week'
+        recurring_pattern: 'every_week'
       });
 
       // Add attachment
-      attachmentOperations.create({
+      attachmentOps.create({
         task_id: task.id,
         filename: 'document.pdf',
         fileSize: 2048,
@@ -305,10 +324,10 @@ describe('Cross-Feature Integration Workflows', () => {
       });
 
       // Add reminder
-      taskOperations.createReminder(task.id, new Date('2026-09-15T09:00:00Z'));
+      taskOps.createReminder(task.id, new Date('2026-09-15T09:00:00Z'));
 
       // Perform backup
-      const backup = await taskOperations.backupDatabase();
+      const backup = await backupOps.createBackup();
 
       expect(backup).toBeDefined();
       expect(backup.checksum).toBeDefined();
@@ -318,15 +337,15 @@ describe('Cross-Feature Integration Workflows', () => {
   describe('Task Dependencies with Recurrence Workflow', () => {
     it('should handle dependent recurring tasks', async () => {
       // Create parent recurring task
-      const parentTask = taskOperations.create({
+      const parentTask = taskOps.create({
         list_id: 1,
         name: 'Parent Recurring Task',
         description: 'Weekly parent task',
-        recurrence_pattern: 'every_week'
+        recurring_pattern: 'every_week'
       });
 
       // Create child task that depends on parent
-      const childTask = taskOperations.create({
+      const childTask = taskOps.create({
         list_id: 1,
         name: 'Child Task',
         description: 'Depends on parent completion',
@@ -337,20 +356,20 @@ describe('Cross-Feature Integration Workflows', () => {
       expect(childTask).toBeDefined();
 
       // Set reminder for parent
-      taskOperations.createReminder(parentTask.id, new Date('2026-09-15T09:00:00Z'));
+      taskOps.createReminder(parentTask.id, new Date('2026-09-15T09:00:00Z'));
 
       // Set reminder for child
-      taskOperations.createReminder(childTask.id, new Date('2026-09-16T09:00:00Z'));
+      taskOps.createReminder(childTask.id, new Date('2026-09-16T09:00:00Z'));
 
       // Both reminders should be created
-      expect(taskOperations.createReminder).toHaveBeenCalledTimes(2);
+      expect(taskOps.createReminder).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Complete Feature Workflow', () => {
     it('should handle full task lifecycle with all features', async () => {
       // 1. Create list
-      const list = listOperations.create({
+      const list = listOps.create({
         name: 'Project List',
         color: '#FF0000',
         emoji: '📁'
@@ -358,17 +377,17 @@ describe('Cross-Feature Integration Workflows', () => {
       expect(list).toBeDefined();
 
       // 2. Create task with recurrence
-      const task = taskOperations.create({
+      const task = taskOps.create({
         list_id: list.id || 1,
         name: 'Full Feature Task',
         description: 'Task using all features',
         priority: 'high',
-        recurrence_pattern: 'every_month'
+        recurring_pattern: 'every_month'
       });
       expect(task).toBeDefined();
 
       // 3. Add attachments
-      attachmentOperations.create({
+      attachmentOps.create({
         task_id: task.id,
         filename: 'spec.pdf',
         fileSize: 5120,
@@ -376,7 +395,7 @@ describe('Cross-Feature Integration Workflows', () => {
         content: 'Specification'
       });
 
-      attachmentOperations.create({
+      attachmentOps.create({
         task_id: task.id,
         filename: 'mockup.png',
         fileSize: 10240,
@@ -385,24 +404,24 @@ describe('Cross-Feature Integration Workflows', () => {
       });
 
       // 4. Set reminders
-      taskOperations.createReminder(task.id, new Date('2026-10-01T09:00:00Z'));
-      taskOperations.createReminder(task.id, new Date('2026-11-01T09:00:00Z'));
+      taskOps.createReminder(task.id, new Date('2026-10-01T09:00:00Z'));
+      taskOps.createReminder(task.id, new Date('2026-11-01T09:00:00Z'));
 
       // 5. Track time
-      const timeEntry = taskOperations.startTimeTracking?.(task.id);
+      const timeEntry = taskOps.startTimeTracking?.(task.id);
       if (timeEntry) {
         expect(timeEntry).toBeDefined();
       }
 
       // 6. Backup
-      const backup = await taskOperations.backupDatabase();
+      const backup = await backupOps.createBackup();
       expect(backup).toBeDefined();
 
       // Verify all operations were called
-      expect(taskOperations.create).toHaveBeenCalled();
-      expect(attachmentOperations.create).toHaveBeenCalledTimes(2);
-      expect(taskOperations.createReminder).toHaveBeenCalledTimes(2);
-      expect(taskOperations.backupDatabase).toHaveBeenCalled();
+      expect(taskOps.create).toHaveBeenCalled();
+      expect(attachmentOps.create).toHaveBeenCalledTimes(2);
+      expect(taskOps.createReminder).toHaveBeenCalledTimes(2);
+      expect(backupOps.createBackup).toHaveBeenCalled();
     });
   });
 });
