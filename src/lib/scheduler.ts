@@ -395,9 +395,9 @@ export class TaskScheduler {
    */
   private selectBestAgent(
     task: ScheduledTask,
-    availableAgents: any[],
+    availableAgents: import('./agent-os').AgentCapabilityProfile[],
     currentContext: string
-  ): any | null {
+  ): import('./agent-os').AgentCapabilityProfile | null {
     // Simple implementation - in reality would use more sophisticated scoring
     return availableAgents[0] || null;
   }
@@ -464,7 +464,7 @@ export class TaskScheduler {
 
     // Calculate next execution time based on recurrence
     const now = new Date();
-    let nextExecution = new Date(now);
+    const nextExecution = new Date(now);
 
     switch (task.recurrence.pattern) {
       case 'hourly':
