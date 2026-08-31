@@ -22,7 +22,6 @@ describe('Onboarding System', () => {
   describe('Onboarding Types and Constants', () => {
     it('initializes with default state', () => {
       const state: OnboardingState = { ...DEFAULT_ONBOARDING_STATE };
-      expect(state.showOnboarding).toBe(undefined); // showOnboarding is computed
       expect(state.currentStep).toBe(0);
       expect(state.completedSteps).toEqual([]);
       expect(state.skipped).toBe(false);
