@@ -1,19 +1,28 @@
 import { TaskFormData } from './types';
+import { generateTaskSuggestions } from './ai/enhancement';
+
+export interface TemplateVariableValidation {
+  min?: number;
+  max?: number;
+  options?: { label: string; value: string }[];
+  defaultValue?: any;
+}
 
 export interface TemplateVariable {
   name: string;
-  type: 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'boolean' | 'email' | 'url';
+  type: 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'boolean' | 'email' | 'url' | 'textarea';
   label?: string;
   defaultValue?: any;
   placeholder?: string;
   required?: boolean;
-  validation?: {
-    pattern?: string;
-    min?: number;
-    max?: number;
-    options?: { label: string; value: any }[];
-  };
-  description?: string;
+  value?: any;
+  wasSubstituted?: boolean;
+  timeEstimate?: number;
+  priority?: string;
+  deadline?: string | Date;
+  category?: 'productivity' | 'streak' | 'milestone' | 'learning' | 'consistency' | 'community';
+  automatic?: boolean;
+  validation?: TemplateVariableValidation;
 }
 
 export interface TemplateSection {
@@ -24,6 +33,7 @@ export interface TemplateSection {
     field: string;
     operator: 'equals' | 'not-equals' | 'contains' | 'greater-than' | 'less-than';
     value: any;
+    hidden?: boolean;
   };
   collapsible?: boolean;
   defaultExpanded?: boolean;
@@ -143,7 +153,7 @@ function processVariable(
   globalVariables: TemplateVariable[]
 ): any {
   // First, try substitution
-  let result = substituteVariable(value, variables, globalVariables);
+  const result = substituteVariable(value, variables, globalVariables);
 
   // Type-specific processing
   switch (variable.type) {
@@ -173,7 +183,7 @@ function processVariable(
 
     case 'select': {
       if (typeof result === 'string' && variable.validation?.options) {
-        const selectedOption = variable.validation.options.find(
+        const selectedOption = variable.validation.options!.find(
           (opt: { label: string }) => opt.label === result
         );
         return selectedOption?.value ?? result;
@@ -184,8 +194,9 @@ function processVariable(
     case 'multiselect': {
       if (typeof result === 'string' && variable.validation?.options) {
         const selectedValues = result.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        const options = variable.validation.options!;
         return selectedValues.filter((v: string) =>
-          variable.validation.options!.some((opt: { value: any }) => String(opt.value) === String(v))
+          options.some((opt: { value: any }) => String(opt.value) === String(v))
         );
       }
       return result;
@@ -282,7 +293,7 @@ export function applyTemplate(
   }
 
   // Build the task form data from template fields
-  const taskData: TaskFormData = {};
+  const taskData: Partial<TaskFormData> = {};
 
   // Process all fields across sections
   for (const section of processedSections) {
@@ -339,15 +350,15 @@ export function applyTemplate(
             default:
               fieldName = mappedName.toLowerCase() as keyof TaskFormData;
           }
-          // Only set if it's a valid TaskFormData key
-          if (fieldName in taskData) {
-            taskData[fieldName] = fieldName === 'estimate_minutes' || fieldName === 'priority'
-              ? String(fieldName === 'estimate_minutes' ? fieldName : fieldName)
-              : fieldName === 'is_recurring'
-                ? String(fieldName === 'is_recurring' ? fieldName : fieldName === 'recurring_pattern' ? fieldName : fieldName)
-                : (taskData[fieldName] as any) = fieldName === 'estimate_minutes'
-                  ? Number(field.value)
-                  : (taskData[fieldName] as any) = field.value;
+          // Set the field value with appropriate type coercion
+          if (fieldName === 'estimate_minutes') {
+            taskData[fieldName] = Number(field.value) as any;
+          } else if (fieldName === 'priority') {
+            taskData[fieldName] = field.value as any;
+          } else if (fieldName === 'is_recurring') {
+            taskData[fieldName] = Boolean(field.value) as any;
+          } else {
+            taskData[fieldName] = field.value as any;
           }
         }
       }
@@ -362,7 +373,7 @@ export function applyTemplate(
   }
 
   return {
-    task: taskData,
+    task: taskData as TaskFormData,
     variables,
     substitutions: { applied, failed }
   };
@@ -378,7 +389,7 @@ export function generateDefaultTemplates(): TaskTemplate[] {
       name: 'Work Task',
       description: 'Standard template for work-related tasks',
       category: 'work',
-      tags: ['work', 'business'],
+      tags: ['work', 'business', 'professional'],
       isPublic: true,
       sections: [
         {
@@ -387,14 +398,15 @@ export function generateDefaultTemplates(): TaskTemplate[] {
           fields: [
             { name: 'taskName', type: 'text', label: 'Task Name', placeholder: 'Enter task name', required: true },
             { name: 'taskDescription', type: 'textarea', label: 'Description', placeholder: 'Describe the task', validation: { max: 1000 } },
-            { name: 'estimateMinutes', type: 'number', label: 'Estimate (minutes)', placeholder: 'Estimated time', validation: { min: 1, max: 480 } }
+            { name: 'estimateMinutes', type: 'number', label: 'Estimate (minutes)', defaultValue: 30, validation: { min: 1, max: 480 } }
           ]
         },
         {
           id: 'priority',
-          title: 'Priority',
+          title: 'Priority & Deadline',
           fields: [
-            { name: 'priority', type: 'select', label: 'Priority', options: [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low', value: 'low' }] }
+            { name: 'priority', type: 'select', label: 'Priority', validation: { options: [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low', value: 'low' }] } },
+            { name: 'deadline', type: 'date', label: 'Deadline (optional)', placeholder: 'YYYY-MM-DD' }
           ]
         }
       ],
@@ -411,15 +423,135 @@ export function generateDefaultTemplates(): TaskTemplate[] {
       name: 'Personal Task',
       description: 'Template for personal errands and tasks',
       category: 'personal',
-      tags: ['personal', 'errand'],
+      tags: ['personal', 'errand', 'life'],
       isPublic: true,
       sections: [
         {
           id: 'basic-info',
-          title: 'Basic Information',
+          title: 'Task Details',
           fields: [
             { name: 'taskName', type: 'text', label: 'Task Name', placeholder: 'Enter task name', required: true },
-            { name: 'errandType', type: 'select', label: 'Errand Type', options: [{ label: 'Shopping', value: 'shopping' }, { label: 'Appointment', value: 'appointment' }, { label: 'Home Maintenance', value: 'home-maintenance' }] }
+            { name: 'errandType', type: 'select', label: 'Errand Type', validation: { options: [{ label: 'Shopping', value: 'shopping' }, { label: 'Appointment', value: 'appointment' }, { label: 'Home Maintenance', value: 'home-maintenance' }, { label: 'Health', value: 'health' }, { label: 'Family', value: 'family' }] } }
+          ]
+        },
+        {
+          id: 'schedule',
+          title: 'When',
+          fields: [
+            { name: 'date', type: 'date', label: 'Date', placeholder: 'YYYY-MM-DD' },
+            { name: 'estimateMinutes', type: 'number', label: 'Time Needed (minutes)', defaultValue: 30, validation: { min: 5, max: 240 } }
+          ]
+        }
+      ],
+      templateTask: {
+        name: '',
+        estimate_minutes: 30
+      }
+    },
+
+    // Meeting Template
+    {
+      name: 'Meeting',
+      description: 'Template for meeting tasks with agenda and follow-ups',
+      category: 'meeting',
+      tags: ['meeting', 'agenda', 'collaboration'],
+      isPublic: true,
+      sections: [
+        {
+          id: 'meeting-details',
+          title: 'Meeting Details',
+          fields: [
+            { name: 'meetingTitle', type: 'text', label: 'Meeting Title', placeholder: 'Meeting title', required: true },
+            { name: 'meetingDate', type: 'date', label: 'Date', placeholder: 'YYYY-MM-DD', defaultValue: new Date().toISOString().split('T')[0] },
+            { name: 'meetingDuration', type: 'number', label: 'Duration (minutes)', placeholder: 'e.g., 60', defaultValue: 60, validation: { min: 15, max: 240 } }
+          ]
+        },
+        {
+          id: 'agenda',
+          title: 'Agenda Items',
+          fields: [
+            { name: 'agendaItem', type: 'text', label: 'Agenda Item', placeholder: 'Agenda item', required: true }
+          ]
+        }
+      ],
+      templateTask: {
+        name: 'Meeting: ',
+        estimate_minutes: 60
+      }
+    },
+
+    // Project Task Template
+    {
+      name: 'Project Task',
+      description: 'Comprehensive template for project-based work',
+      category: 'work',
+      tags: ['project', 'development', 'planning'],
+      isPublic: true,
+      sections: [
+        {
+          id: 'project-info',
+          title: 'Project Details',
+          fields: [
+            { name: 'taskName', type: 'text', label: 'Task Name', placeholder: 'Enter task name', required: true },
+            { name: 'taskDescription', type: 'textarea', label: 'Description', placeholder: 'Detailed task description', validation: { max: 2000 } },
+            { name: 'projectGoal', type: 'textarea', label: 'Project Goal/Objective', placeholder: 'What are we trying to achieve?', validation: { max: 500 } }
+          ]
+        },
+        {
+          id: 'technical',
+          title: 'Technical Details',
+          fields: [
+            { name: 'technicalSpec', type: 'textarea', label: 'Technical Specifications', placeholder: 'Technical requirements, specs, etc.', validation: { max: 1000 } },
+            { name: 'dependencies', type: 'text', label: 'Dependencies (comma-separated)', placeholder: 'Other tasks this depends on' }
+          ]
+        },
+        {
+          id: 'planning',
+          title: 'Planning',
+          fields: [
+            { name: 'estimateMinutes', type: 'number', label: 'Time Estimate (minutes)', defaultValue: 120, validation: { min: 15, max: 1440 } },
+            { name: 'deadline', type: 'date', label: 'Deadline' },
+            { name: 'priority', type: 'select', label: 'Priority', validation: { options: [{ label: 'Critical', value: 'high' }, { label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low', value: 'low' }] } }
+          ]
+        }
+      ],
+      templateTask: {
+        name: '',
+        description: '',
+        estimate_minutes: 120,
+        priority: 'medium'
+      }
+    },
+
+    // Learning Task Template
+    {
+      name: 'Learning Task',
+      description: 'Template for learning new skills or studying',
+      category: 'learning',
+      tags: ['learning', 'education', 'skill'],
+      isPublic: true,
+      sections: [
+        {
+          id: 'learning-info',
+          title: 'Learning Details',
+          fields: [
+            { name: 'taskName', type: 'text', label: 'Topic/Skill Name', placeholder: 'What are you learning?', required: true },
+            { name: 'learningSource', type: 'select', label: 'Source Type', validation: { options: [{ label: 'Book', value: 'book' }, { label: 'Course', value: 'course' }, { label: 'Video', value: 'video' }, { label: 'Tutorial', value: 'tutorial' }, { label: 'Experiment', value: 'experiment' }] } }
+          ]
+        },
+        {
+          id: 'goals',
+          title: 'Learning Goals',
+          fields: [
+            { name: 'learningOutcome', type: 'textarea', label: 'Expected Outcome', placeholder: 'What will you be able to do?', validation: { max: 500 } }
+          ]
+        },
+        {
+          id: 'schedule',
+          title: 'Schedule',
+          fields: [
+            { name: 'estimateMinutes', type: 'number', label: 'Study Time (minutes)', defaultValue: 60, validation: { min: 30, max: 360 } },
+            { name: 'deadline', type: 'date', label: 'Completion Date' }
           ]
         }
       ],
@@ -429,39 +561,41 @@ export function generateDefaultTemplates(): TaskTemplate[] {
       }
     },
 
-    // Meeting Template
+    // Review Task Template
     {
-      name: 'Meeting',
-      description: 'Template for meeting tasks with agenda and follow-ups',
-      category: 'meeting',
-      tags: ['meeting', 'agenda'],
+      name: 'Review Task',
+      description: 'Template for reviewing work, code, or content',
+      category: 'work',
+      tags: ['review', 'quality', 'feedback'],
       isPublic: true,
       sections: [
         {
-          id: 'meeting-details',
-          title: 'Meeting Details',
+          id: 'review-info',
+          title: 'Review Details',
           fields: [
-            { name: 'meetingTitle', type: 'text', label: 'Meeting Title', placeholder: 'Meeting title', required: true },
-            { name: 'meetingDate', type: 'date', label: 'Date', placeholder: 'YYYY-MM-DD' },
-            { name: 'meetingDuration', type: 'number', label: 'Duration (minutes)', placeholder: 'e.g., 60', validation: { min: 15, max: 240 } }
+            { name: 'taskName', type: 'text', label: 'Item to Review', placeholder: 'What are you reviewing?', required: true },
+            { name: 'reviewerNotes', type: 'textarea', label: 'Review Notes', placeholder: 'Your observations and feedback', validation: { max: 1000 } }
           ]
         },
         {
-          id: 'agenda',
-          title: 'Agenda Items',
+          id: 'criteria',
+          title: 'Review Criteria',
           fields: [
-            { name: 'agendaItem', type: 'text', label: 'Agenda Item', placeholder: 'Agenda item', required: true }
-          ],
-          condition: {
-            field: 'agendaItem',
-            operator: 'contains',
-            value: ''
-          }
+            { name: 'qualityScore', type: 'number', label: 'Quality Score (1-10)', defaultValue: 5, validation: { min: 1, max: 10 } },
+            { name: 'feedbackSummary', type: 'textarea', label: 'Summary', placeholder: 'Overall feedback summary', validation: { max: 200 } }
+          ]
+        },
+        {
+          id: 'nextSteps',
+          title: 'Next Steps',
+          fields: [
+            { name: 'actionItems', type: 'text', label: 'Action Items (comma-separated)', placeholder: 'Items that need to be done' }
+          ]
         }
       ],
       templateTask: {
-        name: 'Meeting: ',
-        estimate_minutes: 60
+        name: '',
+        estimate_minutes: 30
       }
     }
   ];
@@ -567,7 +701,7 @@ export function validateTemplateVariable(
  */
 export function createTemplateFromFormData(
   name: string,
-  description: string | null,
+  description: string,
   category: string,
   tags: string[],
   sections: TemplateVariable[][]
@@ -589,4 +723,206 @@ export function createTemplateFromFormData(
   };
 }
 
-export { generateDefaultTemplates };
+/**
+ * NEW: Generate AI-powered smart templates based on user task patterns
+ */
+export async function generateSmartTemplate(
+  taskName: string,
+  taskDescription?: string
+): Promise<TaskTemplate> {
+  // Use AI to suggest a template structure based on the task
+  const aiResponse = await generateTaskSuggestions({
+    priority: 'medium',
+    estimate_minutes: 30,
+    date: undefined
+  }).catch(() => ({
+    priority: 'medium',
+    suggestedTimeEstimate: 30,
+    suggestedDate: null,
+    relatedTasks: [],
+    confidence: 50
+  }));
+
+  const category = categorizeTask(taskName, taskDescription);
+
+  return {
+    name: taskName,
+    description: taskDescription || `Auto-generated template for "${taskName}"`,
+    category,
+    tags: [category, 'smart-template'],
+    isPublic: false,
+    version: 1,
+    sections: [
+      {
+        id: 'main',
+        title: 'Task Details',
+        fields: [
+          { name: 'taskName', type: 'text', label: 'Task Name', placeholder: 'Enter task name', required: true },
+          { name: 'taskDescription', type: 'textarea', label: 'Description', placeholder: 'Enter detailed description' },
+          { name: 'estimateMinutes', type: 'number', label: 'Estimate (minutes)', defaultValue: aiResponse.suggestedTimeEstimate, validation: { min: 1, max: 480 } },
+          { name: 'priority', type: 'select', label: 'Priority', validation: { options: [{ label: 'High', value: 'high' }, { label: 'Medium', value: 'medium' }, { label: 'Low', value: 'low' }] } },
+          { name: 'deadline', type: 'date', label: 'Deadline (optional)', placeholder: 'YYYY-MM-DD' }
+        ]
+      }
+    ],
+    templateTask: {
+      name: taskName,
+      description: taskDescription || '',
+      estimate_minutes: aiResponse.suggestedTimeEstimate,
+      priority: aiResponse.priority as any
+    }
+  };
+}
+
+/**
+ * Categorize a task based on its name and description
+ */
+function categorizeTask(name: string, description?: string): string {
+  const text = (name + ' ' + (description || '')).toLowerCase();
+
+  const patterns: { [key: string]: RegExp } = {
+    'work': /meeting|project|work|client|deadline|report|presentation/i,
+    'personal': /personal|family|health|exercise|gym|doctor| appointment/i,
+    'learning': /learn|study|read|course|tutorial|education|skill/i,
+    'creative': /design|create|write|brainstorm|idea|draft|content/i,
+    'admin': /email|reply|organize|files|backup|update|admin/i,
+    'maintenance': /fix|repair|maintenance|update|upgrade/i,
+  };
+
+  for (const [category, regex] of Object.entries(patterns)) {
+    if (regex.test(text)) {
+      return category;
+    }
+  }
+
+  return 'general';
+}
+
+/**
+ * Get template suggestions based on current context
+ */
+export async function getTemplateSuggestions(
+  context?: string,
+  listId?: number
+): Promise<TaskTemplate[]> {
+  // Start with default templates
+  const defaults = generateDefaultTemplates();
+
+  // If we have context, suggest relevant templates
+  if (context) {
+    const category = categorizeTask(context);
+    const matching = defaults.filter(t => t.category === category);
+    if (matching.length > 0) {
+      return matching;
+    }
+  }
+
+  // Return all templates if no context
+  return defaults;
+}
+
+/**
+ * Save a template for future use
+ */
+export async function saveTemplate(
+  template: TaskTemplate,
+  userId: string = 'default'
+): Promise<{ id: number; name: string }> {
+  const db = (await import('./db/schema')).default;
+
+  const result = db.prepare(`
+    INSERT INTO templates (name, description, list_id, template_data, user_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    template.name,
+    template.description || '',
+    template.globalVariables?.[0]?.value || null,
+    JSON.stringify(template),
+    userId
+  );
+
+  return {
+    id: Number(result.lastInsertRowid),
+    name: template.name
+  };
+}
+
+/**
+ * Load templates for a user
+ */
+export async function loadTemplates(userId: string = 'default'): Promise<TaskTemplate[]> {
+  const db = (await import('./db/schema')).default;
+
+  const rows = db.prepare(`
+    SELECT * FROM templates WHERE user_id = ? OR user_id = 'default'
+    ORDER BY created_at DESC
+  `).all(userId) as any[];
+
+  return rows.map(row => {
+    try {
+      const template = JSON.parse(row.template_data);
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        category: template.category || 'general',
+        ...template
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean) as TaskTemplate[];
+}
+
+/**
+ * Get templates by category
+ */
+export async function getTemplatesByCategory(
+  category: string,
+  userId: string = 'default'
+): Promise<TaskTemplate[]> {
+  const all = await loadTemplates(userId);
+  return all.filter(t => t.category === category);
+}
+
+/**
+ * Clone a template with modifications
+ */
+export function cloneTemplate(
+  template: TaskTemplate,
+  modifications: Partial<TaskTemplate> = {}
+): TaskTemplate {
+  return {
+    ...template,
+    ...modifications,
+    sections: template.sections.map(section => ({
+      ...section,
+      fields: section.fields.map(field => ({ ...field }))
+    }))
+  };
+}
+
+/**
+ * Export a template
+ */
+export function exportTemplate(template: TaskTemplate): string {
+  return JSON.stringify(template, null, 2);
+}
+
+/**
+ * Import a template
+ */
+export function importTemplate(templateJson: string): TaskTemplate {
+  const parsed = JSON.parse(templateJson);
+  return {
+    name: parsed.name,
+    description: parsed.description,
+    category: parsed.category || 'general',
+    tags: parsed.tags || [],
+    isPublic: parsed.isPublic || false,
+    sections: parsed.sections,
+    templateTask: parsed.templateTask || {},
+    globalVariables: parsed.globalVariables,
+    version: parsed.version || 1
+  };
+}
