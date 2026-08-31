@@ -1,13 +1,13 @@
 export class PatternMiningService {
   taskKey(task: { created_at: number }): string {
-    // Key format: h_HH_m_MM_w_WW
+    // Key format: h_HH_m_MM_w_WW (uses UTC for deterministic behavior)
     const date = new Date(task.created_at)
-    const weekOfMonth = Math.ceil(date.getDate() / 7)
-    return `h_${date.getHours().toString().padStart(2, '0')}_m_${date.getMinutes().toString().padStart(2, '0')}_w_${weekOfMonth.toString().padStart(2, '0')}`
+    const weekOfMonth = Math.ceil(date.getUTCDate() / 7)
+    return `h_${date.getUTCHours()}_m_${date.getUTCMinutes()}_w_${weekOfMonth}`
   }
 
   clusterTasks(tasks: Array<{ created_at: number }>): Map<string, Array<{ created_at: number }>> {
-    const clusters = new Map()
+    const clusters = new Map<string, Array<{ created_at: number }>>()
     for (const task of tasks) {
       const key = this.taskKey(task)
       if (!clusters.has(key)) clusters.set(key, [])
@@ -16,35 +16,37 @@ export class PatternMiningService {
     return clusters
   }
 
-  extractPatternsFromClusters(clusters: Map<string, Array<{ created_at: number }>>): Array<{ id: string; type: string; interval: number; description: string }> {
-    const patterns = []
+  extractPatternsFromClusters(
+    clusters: Map<string, Array<{ created_at: number }>>
+  ): Array<{ id: string; type: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval: number; description: string }> {
+    const patterns: Array<{ id: string; type: 'hourly' | 'daily' | 'weekly' | 'monthly'; interval: number; description: string }> = []
     for (const [key, tasks] of clusters) {
-      const [_, hours, minutes, weeks] = key.split('_').map(s => s.replace(/[^\d]/g, ''))
-      const interval = hours === minutes ? 1 : null
-      const weeksNum = parseInt(weeks, 10) || 0
-      const type = interval ? 'hourly' : weeksNum > 1 ? 'monthly' : 'daily'
-      const getDescription = (type: string, interval: number): string => {
-  let unit: string;
-  if (type === 'hourly') {
-    unit = 'hour';
-  } else if (type === 'daily') {
-    unit = 'day';
-  } else if (type === 'weekly') {
-    unit = 'week';
-  } else if (type === 'monthly') {
-    unit = 'month';
-  } else {
-    unit = 'time';
-  }
-  return `Auto-pattern: ${type} every ${interval || 1} ${unit}`;
-};
+      const parts = key.split('_')
+      // parts: ['h', '<hour>', 'm', '<minute>', 'w', '<week>']
+      const weekNum = parseInt(parts[parts.length - 1], 10) || 0
 
-patterns.push({
+      // Determine recurrence type from the week-of-month anchor:
+      //   week 1  → daily   (tasks clustered in the first week of the month)
+      //   week 2+ → monthly (tasks anchored to a specific week of the month)
+      //   no week → weekly  (fallback)
+      let type: 'daily' | 'weekly' | 'monthly'
+      if (weekNum > 1) {
+        type = 'monthly'
+      } else if (weekNum === 1) {
+        type = 'daily'
+      } else {
+        type = 'weekly'
+      }
+
+      const interval = 1
+      const unit = type === 'daily' ? 'day' : type === 'weekly' ? 'week' : 'month'
+
+      patterns.push({
         id: `p_${key}`,
-        type: type as 'hourly' | 'daily' | 'weekly' | 'monthly',
-        interval: interval || 1,
-        description: getDescription(type, interval || 1)
-      });
+        type,
+        interval,
+        description: `Auto-pattern: ${type} every ${interval} ${unit}`,
+      })
     }
     return patterns
   }
@@ -53,6 +55,7 @@ patterns.push({
     return clusterSize >= 3
   }
 }
+
 export type RecurringPatternType = (ReturnType<PatternMiningService['extractPatternsFromClusters']>)[0]['type']
 
 // Create singleton instance
