@@ -155,7 +155,8 @@ export class SearchService {
       fuzzyThreshold = 0.7,
       semantic = true,
       semanticThreshold = 0.8,
-      sortBy = 'relevance'
+      sortBy = 'relevance',
+      sortOrder = 'desc'
     } = options;
 
     const normalizedQuery = SearchService.normalizeText(query);
@@ -286,14 +287,6 @@ export class SearchService {
             break;
           case 'created':
             comparison = (a.created_at || '').localeCompare(b.created_at || '');
-            break;
-          case 'relevance':
-            // Keep fuzzy matches first
-            const aFuzzy = fuzzyMatches.find(m => m.original === SearchService.normalizeText(a.name));
-            const bFuzzy = fuzzyMatches.find(m => m.original === SearchService.normalizeText(b.name));
-            if (aFuzzy && !bFuzzy) comparison = -1;
-            else if (!aFuzzy && bFuzzy) comparison = 1;
-            else comparison = 0;
             break;
         }
 
@@ -450,13 +443,14 @@ export class SearchService {
   }
 
   // Get tasks in a smart folder
-  static getSmartFolderTasks(folderId: number): Task[] {
+  static async getSmartFolderTasks(folderId: number): Promise<Task[]> {
     const folder = db.prepare('SELECT * FROM smart_folders WHERE id = ?').get(folderId) as any;
     if (!folder) return [];
 
     const filters = JSON.parse(folder.filters);
     // Execute search with filters
-    return SearchService.search(folder.filter_query, filters).then(result => result.tasks);
+    const result = await SearchService.search(folder.filter_query, filters);
+    return result.tasks;
   }
 
   public static getInstance(): SearchService {
@@ -527,5 +521,3 @@ const initSearchDatabase = () => {
 
 // Initialize search database
 initSearchDatabase();
-
-export { SearchService };
