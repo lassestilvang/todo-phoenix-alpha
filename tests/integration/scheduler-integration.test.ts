@@ -25,7 +25,7 @@ vi.mock('../../src/lib/db/schema', () => {
       prepare: vi.fn((query: string) => {
         if (query.includes('SELECT version FROM migrations')) {
           return {
-            get: () => ({ version: '1.0.0' })
+            get: (): { version: string } => ({ version: '1.0.0' })
           }
         }
         if (query.includes('SELECT name FROM sqlite_master WHERE type=\'table\'')) {
@@ -35,16 +35,16 @@ vi.mock('../../src/lib/db/schema', () => {
         }
         if (query.includes('SELECT * FROM tasks LIMIT 1')) {
           return {
-            get: () => mockData.tasks[0]
+            get: (): (typeof mockData.tasks)[0] => mockData.tasks[0]
           }
         }
         if (query.includes('SELECT id FROM lists WHERE is_default = 1')) {
           return {
-            get: () => ({ id: 1 })
+            get: (): { id: number } => ({ id: 1 })
           }
         }
         return {
-          get: () => null,
+          get: (): null => null,
           all: () => [],
           run: () => ({ changes: () => 0 })
         }
