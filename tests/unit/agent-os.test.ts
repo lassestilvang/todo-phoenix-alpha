@@ -182,7 +182,7 @@ describe('AgentOS', () => {
       priority: 5,
       dependencies: [],
       created_by: 'test',
-      status: 'pending',
+      status: 'pending' as const,
       created_at: Date.now(),
     };
 
@@ -208,7 +208,7 @@ describe('AgentOS', () => {
       priority: 5,
       dependencies: [],
       created_by: 'test',
-      status: 'pending',
+      status: 'pending' as const,
       created_at: Date.now(),
     };
 
