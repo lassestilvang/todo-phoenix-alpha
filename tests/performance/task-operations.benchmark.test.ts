@@ -95,7 +95,7 @@ describe('Task Operations Performance Benchmarks', () => {
       const { duration } = measurePerformance(() => {
         taskOperations.update(1, {
           name: 'Updated Task',
-          priority: 'urgent'
+          priority: 'high'
         });
       });
 
