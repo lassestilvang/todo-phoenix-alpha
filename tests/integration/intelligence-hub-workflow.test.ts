@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WorkflowManager, WorkflowStep } from '@/lib/intelligence-hub/workflow-manager';
 import { IntelligenceHub } from '@/lib/intelligence-hub';
 import { TaskWithDetails, Task } from '@/lib/types';
@@ -112,6 +113,36 @@ describe('Intelligence Hub Workflow Integration', () => {
     });
 
     it('should handle already completed task', async () => {
+      // Override db mock to return a completed task for this specific test
+      const { default: db } = await import('@/lib/db/schema');
+      vi.mocked(db.prepare).mockImplementation((query: string) => {
+        if (query.includes('WHERE id = ?')) {
+          return {
+            all: vi.fn(() => []),
+            get: vi.fn(() => ({
+              id: 999,
+              is_completed: 1, // Already completed
+              name: 'Test Task',
+              description: '',
+              priority: 'medium',
+              estimate_minutes: 30,
+              date: null,
+              deadline: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })),
+            run: vi.fn(() => ({ lastInsertRowid: 1 })),
+            exec: vi.fn(() => {}),
+          };
+        }
+        return {
+          all: vi.fn(() => []),
+          get: vi.fn(() => undefined),
+          run: vi.fn(() => ({ lastInsertRowid: 1 })),
+          exec: vi.fn(() => {}),
+        };
+      });
+
       // Create workflow for task that's already completed
       const workflowResult = await workflowManager.createCompletionWorkflow(999, 'user-123');
       const result = await workflowManager.executeStep(
