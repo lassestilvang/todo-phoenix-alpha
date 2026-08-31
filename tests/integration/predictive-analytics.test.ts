@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PredictiveAnalytics, DurationPrediction, TaskDurationForecast } from '@/lib/analytics/predictive-analytics';
 import { TaskWithDetails } from '@/lib/types';
 
