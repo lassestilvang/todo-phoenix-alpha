@@ -16,6 +16,7 @@ export interface MeetingData {
   notes?: string;
   platform?: 'zoom' | 'teams' | 'google-meet' | 'in-person' | 'other';
   recordingUrl?: string;
+  actionItems?: ExtractedActionItem[];
 }
 
 export interface ExtractedActionItem {
@@ -211,10 +212,11 @@ export async function createTasksFromActionItems(
     name: `${meetingTitle}: ${item.taskName}`,
     description: item.description + (item.context ? `\n\nContext: ${item.context}` : ''),
     estimate_minutes: item.estimatedMinutes,
-    priority: item.priority,
-    deadline: item.dueDate ? new Date(item.dueDate).toISOString() : undefined,
+    priority: item.priority as 'high' | 'medium' | 'low' | 'none',
+    deadline: item.dueDate ? new Date(item.dueDate) : undefined,
+    list_id: listId,
     // We'll add labels for meeting-related tasks
-    label_ids: [/* meeting label id */]
+    label_ids: []
   }));
 }
 
