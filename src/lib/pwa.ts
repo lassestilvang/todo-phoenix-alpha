@@ -5,7 +5,7 @@
 
 interface CacheEntry {
   key: string
-  value: any
+  value: unknown
   timestamp: number
   expiresAt?: number
 }
@@ -14,7 +14,7 @@ interface SyncOperation {
   id: string
   type: 'create' | 'update' | 'delete'
   table: string
-  data: any
+  data: unknown
   attemptedAt: number
   retries: number
   maxRetries: number
@@ -67,7 +67,7 @@ class PWAManager {
   }
 
   // Cache management
-  async cacheData(key: string, value: any, ttl?: number): Promise<void> {
+  async cacheData(key: string, value: unknown, ttl?: number): Promise<void> {
     const entry: CacheEntry = {
       key,
       value,
@@ -151,7 +151,7 @@ class PWAManager {
     try {
       const saved = localStorage.getItem('pwa_sync_queue')
       if (saved) {
-        const queue = JSON.parse(saved) as Array<any>
+        const queue = JSON.parse(saved) as SyncOperation[]
         this.syncQueue = queue.map(op => ({
           ...op,
           attemptedAt: new Date(op.attemptedAt).getTime()
@@ -245,7 +245,7 @@ class PWAManager {
     return item
   }
 
-  async getList<T>(table: string, filters?: any): Promise<T[]> {
+  async getList<T>(table: string, filters?: unknown): Promise<T[]> {
     const cacheKey = `${table}_${JSON.stringify(filters)}`
     let list = await this.getCachedData<T[]>(cacheKey)
 
@@ -257,7 +257,7 @@ class PWAManager {
     return list || []
   }
 
-  async saveItem(table: string, id: number, data: any): Promise<void> {
+  async saveItem(table: string, id: number, data: unknown): Promise<void> {
     const cacheKey = `${table}_${id}`
 
     if (this.isOnline) {
@@ -279,7 +279,7 @@ class PWAManager {
     }
   }
 
-  async createItem(table: string, data: any): Promise<number> {
+  async createItem(table: string, data: unknown): Promise<number> {
     if (this.isOnline) {
       // Create on server
       const id = await this.createOnServer(table, data)
@@ -292,7 +292,7 @@ class PWAManager {
         id: `${table}_${id}_${Date.now()}`,
         type: 'create',
         table,
-        data: { ...data, id },
+        data: { ...(data as Record<string, unknown>), id },
         attemptedAt: Date.now(),
         retries: 0,
         maxRetries: 3,
@@ -322,18 +322,18 @@ class PWAManager {
     }
   }
 
-  private async fetchFromServer<T>(table: string, id?: number | any): Promise<T> {
+  private async fetchFromServer<T>(table: string, id?: unknown): Promise<T> {
     // Mock implementation - would use actual API calls
     await new Promise(resolve => setTimeout(resolve, 50))
     return {} as T
   }
 
-  private async saveToServer(table: string, id: number, data: any): Promise<void> {
+  private async saveToServer(table: string, id: number, data: unknown): Promise<void> {
     // Mock implementation - would use actual API calls
     await new Promise(resolve => setTimeout(resolve, 50))
   }
 
-  private async createOnServer(table: string, data: any): Promise<number> {
+  private async createOnServer(table: string, data: unknown): Promise<number> {
     // Mock implementation - would use actual API calls
     await new Promise(resolve => setTimeout(resolve, 50))
     return Date.now()
