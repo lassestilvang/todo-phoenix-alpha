@@ -1,4 +1,4 @@
-import db from './db/schema';
+import db from '@/lib/db/schema';
 
 /**
  * Smart Sorting System
@@ -116,6 +116,9 @@ export function calculateTaskScore(
   criteria: SortCriteria[],
   userId: string = 'default'
 ): number {
+  if (!task) return 0;
+  if (!criteria || !Array.isArray(criteria)) return 0;
+
   let score = 0;
   const now = new Date();
   const today = now.toISOString().split('T')[0];
@@ -266,7 +269,7 @@ export function getSuggestedSortCriteria(userId: string = 'default'): SortCriter
 }
 
 // Helper function
-function getDateInDays(days: number): string {
+export function getDateInDays(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().split('T')[0];
