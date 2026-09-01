@@ -95,15 +95,15 @@ describe('Monitoring Service', () => {
 
   describe('Response Time Tracking', () => {
     it('should set average response time', () => {
-      monitoring.setAvgResponseTime(100);
+      monitoring.logRequest('GET', '/api/test', 200, 100);
       expect(monitoring.getSystemMetrics().avgResponseTimeMs).toBe(100);
 
-      monitoring.setAvgResponseTime(200);
+      monitoring.logRequest('GET', '/api/test', 200, 200);
       expect(monitoring.getSystemMetrics().avgResponseTimeMs).toBe(150);
     });
 
     it('should handle single response time', () => {
-      monitoring.setAvgResponseTime(50);
+      monitoring.logRequest('GET', '/api/test', 200, 50);
       expect(monitoring.getSystemMetrics().avgResponseTimeMs).toBe(50);
     });
   });
@@ -300,10 +300,20 @@ describe('Monitoring Service', () => {
     });
 
     it('should calculate correct average after many requests', () => {
+      // setAvgResponseTime expects requests > 0, so we need to increment requests first
+      monitoring.incrementRequest();
       monitoring.setAvgResponseTime(10);
+
+      monitoring.incrementRequest();
       monitoring.setAvgResponseTime(20);
+
+      monitoring.incrementRequest();
       monitoring.setAvgResponseTime(30);
+
+      monitoring.incrementRequest();
       monitoring.setAvgResponseTime(40);
+
+      monitoring.incrementRequest();
       monitoring.setAvgResponseTime(50);
 
       expect(monitoring.getSystemMetrics().avgResponseTimeMs).toBe(30);
