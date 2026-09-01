@@ -18,7 +18,7 @@ vi.mock('next/cache', () => ({
 }));
 
 // Import the module under test - this will use the mocked version
-const {
+import {
   AUTOMATION_TEMPLATES,
   createAutomationRule,
   executeAutomationRule,
@@ -28,7 +28,9 @@ const {
   getAutomationHistory,
   addAutomationHistory,
   automationEngine,
-} = require('../automation-engine');
+} from '../automation-engine';
+
+import db from '@/lib/db/schema';
 
 describe('Automation Engine', () => {
   let mockDb: any;
@@ -38,8 +40,7 @@ describe('Automation Engine', () => {
     vi.clearAllMocks();
 
     // Get references to the mock functions
-    const dbModule = require('@/lib/db/schema');
-    mockDb = dbModule.default;
+    mockDb = db;
 
     // Set up default mock returns
     mockDb.run.mockReturnValue({ changes: 1, lastInsertRowid: 123 });
@@ -237,7 +238,7 @@ describe('Automation Engine', () => {
 
       expect(history).toHaveLength(1);
       expect(history[0].status).toBe('success');
-      expect(history[0].ruleId).toBe(1);
+      expect(history[0].ruleId).toBe('1');
       expect(history[0].triggerEvent).toBe('task-created');
     });
 
@@ -541,8 +542,17 @@ describe('Automation Engine', () => {
     });
 
     it('should handle errors during rule deletion', () => {
-      mockDb.prepare.mockImplementation(() => {
-        throw new Error('Delete failed');
+      // Only throw for delete operations, not all prepare calls
+      mockDb.prepare.mockImplementation((sql) => {
+        if (sql.includes('DELETE FROM automation_rules WHERE id =')) {
+          throw new Error('Delete failed');
+        }
+        // Return the mock for other operations
+        return {
+          run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+          get: vi.fn().mockReturnValue(null),
+          all: vi.fn().mockReturnValue([]),
+        };
       });
 
       expect(() => deleteAutomationRule('rule-1')).toThrow('Delete failed');
@@ -557,8 +567,20 @@ describe('Automation Engine', () => {
         actions: [{ id: 'a1', type: 'send-notification', isEnabled: true, config: {} }],
       };
 
-      mockDb.get.mockReturnValue(mockRule);
-      mockDb.run.mockReturnValue({ changes: 1 });
+      // Restore prepare to return mock for other operations
+      mockDb.prepare.mockImplementation((sql) => {
+        if (sql.includes('SELECT')) {
+          return {
+            get: vi.fn().mockReturnValue(mockRule),
+            all: vi.fn().mockReturnValue([]),
+          };
+        }
+        return {
+          run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+          get: vi.fn().mockReturnValue(null),
+          all: vi.fn().mockReturnValue([]),
+        };
+      });
 
       // When field doesn't exist in event data, condition should return false
       const history = executeAutomationRule('cond-test', 'test', null);
@@ -574,7 +596,20 @@ describe('Automation Engine', () => {
         actions: [],
       };
 
-      mockDb.get.mockReturnValue(mockRule);
+      // Restore prepare to return mock for other operations
+      mockDb.prepare.mockImplementation((sql) => {
+        if (sql.includes('SELECT')) {
+          return {
+            get: vi.fn().mockReturnValue(mockRule),
+            all: vi.fn().mockReturnValue([]),
+          };
+        }
+        return {
+          run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+          get: vi.fn().mockReturnValue(null),
+          all: vi.fn().mockReturnValue([]),
+        };
+      });
 
       const history = executeAutomationRule('empty-actions', 'test-event');
       expect(history).toEqual([]);
