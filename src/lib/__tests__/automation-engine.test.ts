@@ -28,7 +28,7 @@ const {
   getAutomationHistory,
   addAutomationHistory,
   automationEngine,
-} = require('@/lib/automation-engine');
+} = require('../automation-engine');
 
 describe('Automation Engine', () => {
   let mockDb: any;
