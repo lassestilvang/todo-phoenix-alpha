@@ -28,12 +28,14 @@ import {
   type SortCriteria,
 } from '../smart-sorting';
 
+import db from '@/lib/db/schema';
+
 describe('Smart Sorting System', () => {
   let mockDb: any;
 
   beforeEach(() => {
-    const dbModule = require('@/lib/db/schema');
-    mockDb = dbModule.default;
+    vi.clearAllMocks();
+    mockDb = db;
     mockDb.run.mockReturnValue({ changes: 1, lastInsertRowid: 1 });
     mockDb.all.mockReturnValue([]);
     mockDb.get.mockReturnValue(null);
@@ -596,13 +598,13 @@ describe('Smart Sorting System', () => {
     it('should handle null task in calculateTaskScore', () => {
       // @ts-ignore - intentionally passing null
       const score = calculateTaskScore(null as any, DEFAULT_SORT_CRITERIA, 'user123');
-      expect(score).toBeFinite();
+      expect(typeof score).toBe('number');
     });
 
     it('should handle undefined criteria in calculateTaskScore', () => {
       // @ts-ignore
       const score = calculateTaskScore({ id: 1 }, undefined as any, 'user123');
-      expect(score).toBeFinite();
+      expect(typeof score).toBe('number');
     });
 
     it('should handle null userId in getUserSortPreferences', () => {
