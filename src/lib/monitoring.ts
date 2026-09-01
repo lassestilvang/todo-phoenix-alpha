@@ -22,6 +22,14 @@ export class MonitoringService {
     return MonitoringService.instance;
   }
 
+  static resetInstance(): void {
+    MonitoringService.instance = null as any;
+    systemMetrics.requests = 0;
+    systemMetrics.errors = 0;
+    systemMetrics.avgResponseTime = 0;
+    systemMetrics.startTime = Date.now();
+  }
+
   incrementRequest(): void {
     systemMetrics.requests++;
   }
@@ -32,7 +40,11 @@ export class MonitoringService {
 
   setAvgResponseTime(timeMs: number): void {
     const n = systemMetrics.requests;
-    systemMetrics.avgResponseTime = ((systemMetrics.avgResponseTime * (n - 1)) + timeMs) / n;
+    if (n === 0) {
+      systemMetrics.avgResponseTime = timeMs;
+    } else {
+      systemMetrics.avgResponseTime = ((systemMetrics.avgResponseTime * (n - 1)) + timeMs) / n;
+    }
   }
 
   getSystemMetrics() {
