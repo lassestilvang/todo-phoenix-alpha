@@ -171,7 +171,7 @@ export function calculateTaskScore(
 }
 
 // Calculate score based on user interactions
-function calculateInteractionScore(taskId: number, userId: string): number {
+export function calculateInteractionScore(taskId: number, userId: string): number {
   try {
     const interactions = db.prepare(`
       SELECT action, COUNT(*) as count, MAX(timestamp) as last_action
