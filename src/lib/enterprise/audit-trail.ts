@@ -4,6 +4,7 @@
  */
 
 import db from '@/lib/db/schema';
+import { v4 as uuidv4 } from 'uuid';
 import { auditLogger } from '@/lib/audit-logger';
 import { auditLogger as enterpriseLogger } from '@/lib/audit-logger';
 
@@ -79,19 +80,12 @@ export class EnterpriseAuditTrail {
 
   async logEvent(event: Omit<ComplianceEvent, 'id'>): Promise<string> {
     const eventId = uuidv4();
+    const correlationId = uuidv4();
+    const sessionId = 'session_' + uuidv4();
+
+    // Use event properties directly, let spread handle rest
     const fullEvent: ComplianceEvent = {
       id: eventId,
-      timestamp: Date.now(),
-      severity: 'info',
-      status: 'success',
-      complianceRelevance: {
-        gdpr: true,
-        hipaa: false,
-        sox: true,
-        pci: false,
-        scope: 'global',
-      },
-      retentionPeriodMonths: this.retentionMonths,
       ...event,
     };
 
@@ -117,18 +111,18 @@ export class EnterpriseAuditTrail {
       event.ipAddress || 'unknown',
       event.userAgent || 'unknown',
       JSON.stringify({
-        severity: event.severity,
-        status: event.status,
-        compliance: event.complianceRelevance,
-        retention: event.retentionPeriodMonths,
-        ...event.details,
+        severity: fullEvent.severity,
+        status: fullEvent.status,
+        compliance: fullEvent.complianceRelevance,
+        retention: fullEvent.retentionPeriodMonths,
+        ...fullEvent.details,
       }),
-      event.severity,
-      uuidv4(), // correlation_id
-      'session_' + uuidv4(), // session_id
+      fullEvent.severity,
+      correlationId, // correlation_id
+      sessionId, // session_id
       new Date().toISOString(),
       event.eventType,
-      JSON.stringify(event.complianceRelevance)
+      JSON.stringify(fullEvent.complianceRelevance)
     );
 
     return eventId;
@@ -139,22 +133,31 @@ export class EnterpriseAuditTrail {
     const now = Date.now();
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
 
-    // Query events from database (simplified)
-    const query = db.prepare(
-      `SELECT * FROM audit_logs
-       WHERE created_at >= ?
-         AND (?:filterClause)
-       ORDER BY created_at DESC`
-    );
+    // Build parameterized query
+    let querySql = `SELECT * FROM audit_logs WHERE created_at >= ? ORDER BY created_at DESC`;
+    const params: unknown[] = [new Date(thirtyDaysAgo).toISOString()];
 
-    const filterClause = this.buildFilterClause(filters);
-    const params = [new Date(thirtyDaysAgo).toISOString()];
-
-    if (filterClause) {
-      params.push(filterClause);
+    // Build filter conditions safely
+    if (filters.userId) {
+      querySql += ' AND user_id = ?';
+      params.push(filters.userId);
+    }
+    if (filters.resource) {
+      querySql += ' AND table_name = ?';
+      params.push(filters.resource);
+    }
+    if (filters.eventTypes && filters.eventTypes.length > 0) {
+      const placeholders = filters.eventTypes.map(() => '?').join(', ');
+      querySql += ` AND action IN (${placeholders})`;
+      params.push(...filters.eventTypes);
+    }
+    if (filters.severity && filters.severity.length > 0) {
+      const placeholders = filters.severity.map(() => '?').join(', ');
+      querySql += ` AND severity IN (${placeholders})`;
+      params.push(...filters.severity);
     }
 
-    const results = query.all(...params);
+    const results = db.prepare(querySql).all(...params);
 
     const report: AuditReport = {
       id: uuidv4(),
@@ -199,7 +202,17 @@ export class EnterpriseAuditTrail {
   }
 
   private calculateStatistics(events: ComplianceEvent[]): AuditReport['statistics'] {
-    const eventsByType: Record<ComplianceEventType, number> = {};
+    // Initialize all event types to 0
+    const eventTypes: ComplianceEventType[] = [
+      'login_success', 'login_failed', 'logout', 'password_change',
+      'role_assignment', 'permission_grant', 'data_export', 'data_deletion',
+      'access_request', 'compliance_violation', 'security_event',
+      'audit_accessed', 'report_generated'
+    ];
+
+    const eventsByType: Record<ComplianceEventType, number> = {} as Record<ComplianceEventType, number>;
+    eventTypes.forEach(t => { eventsByType[t] = 0; });
+
     const eventsBySeverity: Record<string, number> = {};
 
     for (const event of events) {
@@ -213,7 +226,7 @@ export class EnterpriseAuditTrail {
       eventsBySeverity,
       uniqueUsers: new Set(events.map(e => e.userId)).size,
       uniqueResources: new Set(events.map(e => e.resource)).size,
-      successRate: events.filter(e => e.status === 'success').length / events.length,
+      successRate: events.length > 0 ? events.filter(e => e.status === 'success').length / events.length : 0,
     };
   }
 
