@@ -426,6 +426,24 @@ const migrationTable = db.prepare(`
   );
 `);
 
+// Initialize goal tracking tables
+const initializeGoalTracking = () => {
+  try {
+    // Import and initialize goal tables
+    const { initializeGoalTables } = require('../goal-tracker');
+    initializeGoalTables();
+  } catch (error) {
+    console.warn('Failed to initialize goal tracking tables:', error);
+  }
+};
+
+migrationTable.run();
+
+// Initialize goal tracking tables
+initializeGoalTracking();
+
+// Create default migration record if none exists
+
 migrationTable.run();
 
 // Create users table for authentication and payroll
