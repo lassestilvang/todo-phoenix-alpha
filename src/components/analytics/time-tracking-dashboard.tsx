@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectTrigger, SelectValue, SelectContent, Option } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useTimeTracker } from "@/lib/hooks/use-time-tracker";
 import db from "@/lib/db/schema";
-import { useToast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 interface TimeEntry {
   id: number;
@@ -72,7 +72,7 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
     try {
       const now = new Date();
       const entries = db.prepare(`
-        SELECT t.id, t.task_id, t.name as task_name, t.started_at, t.stopped_at, t.duration_minutes
+        SELECT t.id as id, t.task_id as taskId, t.name as taskName, t.started_at as startedAt, t.stopped_at as stoppedAt, t.duration_minutes as durationMinutes
         FROM time_entries t
         WHERE t.started_at >= ?
         ORDER BY t.started_at DESC
@@ -99,7 +99,7 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
         );
 
         const taskEntries = db.prepare(`
-          SELECT t.id as task_id, t.name, te.started_at, te.stopped_at, te.duration_minutes
+          SELECT t.id as id, t.name, te.started_at as startedAt, te.stopped_at as stoppedAt, te.duration_minutes as durationMinutes
           FROM time_entries te
           JOIN tasks t ON te.task_id = t.id
           WHERE te.started_at >= ? AND te.started_at < ?
@@ -111,10 +111,10 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
 
         stats.push({
           date: dateStr,
-          totalMinutes: dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0),
-          tasksCompleted: taskEntries.filter(e => e.stopped_at !== null && !db.prepare('SELECT * FROM tasks WHERE id = ?').get(e.task_id)?.is_completed).length,
-          tasksInProgress: dayEntries.filter(e => e.stopped_at === null).length,
-          productiveMinutes: dayEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0),
+          totalMinutes: dayEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0),
+          tasksCompleted: taskEntries.filter(e => e.stoppedAt !== null && !db.prepare('SELECT * FROM tasks WHERE id = ?').get(e.id)?.is_completed).length,
+          tasksInProgress: dayEntries.filter(e => e.stoppedAt === null).length,
+          productiveMinutes: dayEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0),
         });
       }
       setDailyStats(stats);
@@ -136,11 +136,11 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
         weekStats.push({
           weekStart: weekStart.toISOString().split('T')[0],
           weekEnd: weekEnd.toISOString().split('T')[0],
-          totalMinutes: weekEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0),
+          totalMinutes: weekEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0),
           avgDailyMinutes: weekEntries.length > 0
-            ? weekEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0) / 7
+            ? weekEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0) / 7
             : 0,
-          completionRate: weekEntries.filter(e => e.stopped_at).length / Math.max(1, weekEntries.length),
+          completionRate: weekEntries.filter(e => e.durationMinutes).length / Math.max(1, weekEntries.length),
           productivityScore: Math.min(1, totalMinutes / 2880), // 8 hours/day * 6 days max
         });
       }
@@ -151,9 +151,9 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
       const hourDurations: number[] = Array(24).fill(0);
 
       entries.forEach(e => {
-        const hour = new Date(e.started_at).getHours();
+        const hour = new Date(e.startedAt).getHours();
         hourCounts[hour]++;
-        hourDurations[hour] += e.duration_minutes || 0;
+        hourDurations[hour] += e.durationMinutes || 0;
       });
 
       const maxDuration = Math.max(...hourDurations) || 1;
@@ -182,11 +182,11 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
   };
 
   const getTotalDuration = (): number => {
-    return timeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+    return timeEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0);
   };
 
   const getActiveTasks = () => {
-    return timeEntries.filter(e => !e.stopped_at);
+    return timeEntries.filter(e => !e.stoppedAt);
   };
 
   if (isLoading) {
@@ -219,9 +219,9 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
               <SelectValue placeholder="Select range" />
             </SelectTrigger>
             <SelectContent>
-              <Option value="day">Last 7 Days</Option>
-              <Option value="week">Last 4 Weeks</Option>
-              <Option value="month">Last Month</Option>
+              <SelectItem value="day">Last 7 Days</SelectItem>
+              <SelectItem value="week">Last 4 Weeks</SelectItem>
+              <SelectItem value="month">Last Month</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="ghost" size="sm">
@@ -251,14 +251,14 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{activeTasks.length}</div>
             <p className="text-xs text-muted-foreground">
-              {activeTasks.reduce((sum, t) => sum + (t.duration_minutes || 0), 0)}m total
+              {activeTasks.reduce((sum, t) => sum + (t.durationMinutes || 0), 0)}m total
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle classNameClass="text-sm font-medium">Avg Session</CardTitle>
+            <CardTitle className="text-sm font-medium">Avg Session</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{avgSession}m</div>
@@ -395,7 +395,7 @@ export function TimeTrackingDashboard({ className }: TimeTrackingDashboardProps)
           <CardContent>
             <div className="space-y-3">
               {activeTasks.map((entry) => {
-                const duration = entry.duration_minutes || 0;
+                const duration = entry.durationMinutes || 0;
                 const hours = Math.floor(duration / 60);
                 const mins = duration % 60;
                 return (
