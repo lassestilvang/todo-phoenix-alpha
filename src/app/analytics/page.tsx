@@ -2,10 +2,16 @@
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { AnalyticsDashboard } from "@/app/components/analytics/AnalyticsDashboard";
+import { TimeTrackingDashboard } from "@/components/analytics/time-tracking-dashboard";
+import { GoalDashboard } from "@/components/analytics/goal-dashboard";
+import { WellnessDashboard } from "@/components/analytics/wellness-dashboard";
+import { TeamCollaborationDashboard } from "@/components/analytics/team-collaboration-dashboard";
 import { useEffect, useState } from "react";
 import { getTasks, getTimeEntries, getTasksByDateRange } from "@/app/actions/tasks";
 import { format } from "date-fns";
 import type { Task } from "@/lib/types/index";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { BarChart3, Clock, Target, Heart, Users } from "lucide-react";
 
 interface TimeEntry {
   id: number;
@@ -106,13 +112,52 @@ export default function AnalyticsPage() {
           ))}
         </div>
 
-        {/* Analytics Dashboard */}
-        <AnalyticsDashboard
-          tasks={tasks}
-          timeEntries={timeEntries}
-          selectedTimeframe={selectedTimeframe}
-          onTimeframeChange={handleTimeframeChange}
-        />
+        {/* Analytics Dashboard with Tabs */}
+        <Tabs defaultValue="analytics" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+            <TabsTrigger value="time-tracking" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Time Tracking
+            </TabsTrigger>
+            <TabsTrigger value="goals" className="flex items-center gap-2">
+              <Target className="h-4 w-4" />
+              Goals
+            </TabsTrigger>
+            <TabsTrigger value="wellness" className="flex items-center gap-2">
+              <Heart className="h-4 w-4" />
+              Wellness
+            </TabsTrigger>
+            <TabsTrigger value="team" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Team
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="analytics">
+            <AnalyticsDashboard
+              tasks={tasks}
+              timeEntries={timeEntries}
+              selectedTimeframe={selectedTimeframe}
+              onTimeframeChange={handleTimeframeChange}
+            />
+          </TabsContent>
+          <TabsContent value="time-tracking">
+            <TimeTrackingDashboard />
+          </TabsContent>
+          <TabsContent value="goals">
+            <GoalDashboard />
+          </TabsContent>
+          <TabsContent value="wellness">
+            <WellnessDashboard />
+          </TabsContent>
+          <TabsContent value="team">
+            <TeamCollaborationDashboard />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
