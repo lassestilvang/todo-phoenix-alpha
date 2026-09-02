@@ -28,6 +28,7 @@ import {
   getAutomationHistory,
   addAutomationHistory,
   automationEngine,
+  type AutomationRule,
 } from '../automation-engine';
 
 import db from '@/lib/db/schema';
@@ -111,7 +112,7 @@ describe('Automation Engine', () => {
         isActive: true,
         priority: 'high',
         createdBy: 'test-user',
-      };
+      } as Omit<AutomationRule, "id" | "createdAt">;
 
       const result = createAutomationRule(rule);
 
@@ -137,7 +138,7 @@ describe('Automation Engine', () => {
         isActive: true,
         priority: 'medium',
         createdBy: 'test-user',
-      };
+      } as AutomationRule;
 
       const result = createAutomationRule(ruleWithConditions);
       expect(result).toBeDefined();
@@ -167,7 +168,7 @@ describe('Automation Engine', () => {
         isActive: true,
         priority: 'low',
         createdBy: 'test-user',
-      };
+      } as AutomationRule;
 
       mockDb.run.mockReturnValue({ changes: 1, lastInsertRowid: 456 });
 
@@ -192,7 +193,7 @@ describe('Automation Engine', () => {
         isActive: true,
         priority: 'high',
         createdBy: 'user',
-      };
+      } as AutomationRule;
 
       mockDb.run.mockReturnValue({ changes: 1, lastInsertRowid: 789 });
 
@@ -543,7 +544,7 @@ describe('Automation Engine', () => {
 
     it('should handle errors during rule deletion', () => {
       // Only throw for delete operations, not all prepare calls
-      mockDb.prepare.mockImplementation((sql) => {
+      mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('DELETE FROM automation_rules WHERE id =')) {
           throw new Error('Delete failed');
         }
@@ -568,7 +569,7 @@ describe('Automation Engine', () => {
       };
 
       // Restore prepare to return mock for other operations
-      mockDb.prepare.mockImplementation((sql) => {
+      mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT')) {
           return {
             get: vi.fn().mockReturnValue(mockRule),
@@ -597,7 +598,7 @@ describe('Automation Engine', () => {
       };
 
       // Restore prepare to return mock for other operations
-      mockDb.prepare.mockImplementation((sql) => {
+      mockDb.prepare.mockImplementation((sql: string) => {
         if (sql.includes('SELECT')) {
           return {
             get: vi.fn().mockReturnValue(mockRule),
