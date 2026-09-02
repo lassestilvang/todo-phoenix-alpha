@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react"
+import { SchedulerInsights } from "@/lib/scheduler-ui"
 import {
   X, Clock, Calendar, Tag, AlertCircle, History,
   Paperclip, Timer, Play, Pause, Square, Upload, Trash2,
@@ -141,6 +142,7 @@ export function TaskDetailModal({
                 onEditSubtask={onEditSubtask}
                 onCreateSubtask={onCreateSubtask}
               />
+              <SchedulerInsights taskId={task.id} />
             </ScrollArea>
           </div>
         ) : (
@@ -196,6 +198,7 @@ export function TaskDetailModal({
                   onEditSubtask={onEditSubtask}
                   onCreateSubtask={onCreateSubtask}
                 />
+                <SchedulerInsights taskId={task.id} />
               </div>
             </ScrollArea>
           </div>
