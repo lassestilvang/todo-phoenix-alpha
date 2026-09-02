@@ -3,13 +3,14 @@
 
 import { useEffect, useState } from "react";
 import { useTimeTracker } from "@/lib/hooks/use-time-tracker";
-import { getSchedulingInsights, getDailyRecommendations } from "@/lib/adaptive-scheduler";
+import { getSchedulingInsights, getDailyRecommendations, SchedulingRecommendation, TaskPattern, UserBehaviorProfile, AdaptiveScheduleConfig } from "@/lib/adaptive-scheduler";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Calendar, Clock, Target, TrendingUp, Activity, BarChart } from "lucide-react";
+import { toast } from "sonner";
 
 export interface SchedulerInsightsProps {
   taskId: number;
@@ -27,7 +28,9 @@ export function SchedulerInsights({ taskId, showRecommendations = true, onSchedu
   const [dailyRecommendations, setDailyRecommendations] = useState<SchedulingRecommendation[] | null>(null);
   const [loading, setLoading] = useState(true);
   const { isRunning, elapsedSeconds, formatTime } = useTimeTracker(taskId);
-  const { open: toastOpen, dismiss: dismissToast } = useToast();
+
+  const [toastOpen, setToastOpen] = useState(false);
+  const dismissToast = () => setToastOpen(false);
 
   useEffect(() => {
     const loadInsights = async () => {
@@ -82,7 +85,7 @@ export function SchedulerInsights({ taskId, showRecommendations = true, onSchedu
     );
   }
 
-  const riskColors = {
+  const riskColors: Record<string, string> = {
     low: "bg-green-500/10 text-green-500",
     medium: "bg-yellow-500/10 text-yellow-500",
     high: "bg-red-500/10 text-red-500",
@@ -203,7 +206,7 @@ export function SchedulerInsights({ taskId, showRecommendations = true, onSchedu
         </Button>
 
         <Button
-          variant="primary"
+          variant="default"
           size="sm"
           onClick={() => {
             // Show today's recommendations
