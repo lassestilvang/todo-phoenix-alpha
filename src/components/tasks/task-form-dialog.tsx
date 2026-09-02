@@ -7,7 +7,7 @@ import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Calendar, Clock, Tag, AlertCircle, Save, Repeat,
-  Paperclip as IconPaperclip, X as IconX, Upload, Loader2, CheckCircle2
+  Paperclip as IconPaperclip, X as IconX, Upload, Loader2, CheckCircle2, Zap, Brain
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { format } from "date-fns"
 import type { TaskFormData, Priority, RecurringPattern, List, Label } from "@/lib/types"
 import { addAttachmentToTask } from "@/app/actions/tasks"
+import { getSchedulingInsights } from "@/lib/adaptive-scheduler"
 import { toast } from "sonner"
 
 const taskSchema = z.object({
@@ -113,6 +114,7 @@ export function TaskFormDialog({
   const [showRecurringOptions, setShowRecurringOptions] = useState(false)
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>(task?.attachments || [])
   const [showReminderOptions, setShowReminderOptions] = useState(false)
+  const [autoSchedule, setAutoSchedule] = useState(false)
 
   // File upload state
   const [fileUploadOpen, setFileUploadOpen] = useState(false)
@@ -420,6 +422,62 @@ export function TaskFormDialog({
                   <span>8h</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Adaptive Scheduling */}
+          <div className="space-y-4">
+            <h3 className="font-medium flex items-center gap-2">
+              <Brain className="h-4 w-4" />
+              Smart Scheduling
+            </h3>
+
+            <div className="p-3 border rounded-lg bg-muted/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Auto-schedule this task</p>
+                  <p className="text-xs text-muted-foreground">
+                    AI will find the optimal time based on your energy patterns
+                  </p>
+                </div>
+                <Checkbox
+                  checked={autoSchedule}
+                  onCheckedChange={(checked) => {
+                    setAutoSchedule(checked as boolean)
+                    if (checked) {
+                      // Auto-suggest optimal time
+                      const insights = getSchedulingInsights(estimateMinutes)
+                      if (insights.bestTimeSlots.length > 0) {
+                        const bestSlot = insights.bestTimeSlots[0]
+                        const suggestedDate = new Date()
+                        suggestedDate.setDate(suggestedDate.getDate() + 1)
+                        form.setValue("date", suggestedDate)
+                        toast("Suggested time", {
+                          description: `Best slot: ${bestSlot.hour < 10 ? '0' : ''}${bestSlot.hour}:00`
+                        })
+                      }
+                    }
+                  }}
+                />
+              </div>
+
+              {autoSchedule && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  className="mt-3 space-y-2"
+                >
+                  <div className="flex items-center gap-2 text-xs">
+                    <Zap className="h-3 w-3 text-yellow-500" />
+                    <span>Optimal scheduling enabled</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Task will be scheduled during your most productive hours
+                  </p>
+                </motion.div>
+              )}
             </div>
           </div>
 
