@@ -267,7 +267,7 @@ export function getGoalRecommendations(userId: string): GoalRecommendation[] {
         // Check deadline alignment
         if (task.deadline) {
           const taskDeadline = new Date(task.deadline);
-          const krEnd = new Date(objective.end_date);
+          const krEnd = new Date(objective.endDate);
           if (taskDeadline <= krEnd) {
             matchScore += kr.weight * 0.3;
             reasons.push(`Deadline fits OKR timeline`);
