@@ -335,7 +335,7 @@ describe('Meeting Assistant', () => {
           taskName: 'Task 2',
           description: 'Desc 2',
           assignee: 'user2',
-          dueDate: null,
+          dueDate: undefined,
           priority: 'medium',
           estimatedMinutes: 45,
           relatedTopics: [],
@@ -361,7 +361,7 @@ describe('Meeting Assistant', () => {
         {
           taskName: 'Task without assignee',
           description: 'No one assigned',
-          dueDate: null,
+          dueDate: undefined,
           priority: 'low',
           estimatedMinutes: 15,
           relatedTopics: [],
@@ -410,7 +410,7 @@ describe('Meeting Assistant', () => {
         {
           taskName: 'New task',
           description: 'Do something',
-          dueDate: null,
+          dueDate: undefined,
           priority: 'medium',
           estimatedMinutes: 30,
           relatedTopics: [],
@@ -504,7 +504,7 @@ describe('Meeting Assistant', () => {
 
     it('should provide recommendations for very low completion rate', async () => {
       const meetings: MeetingData[] = [
-        { title: 'M1', date: '2026-01-01', durationMinutes: 90, attendees: ['user'], actionItems: [{ taskName: 't', description: 'd', dueDate: null, priority: 'medium', estimatedMinutes: 30, relatedTopics: [], confidence: 0.5, context: '' }] },
+        { title: 'M1', date: '2026-01-01', durationMinutes: 90, attendees: ['user'], actionItems: [{ taskName: 't', description: 'd', dueDate: undefined, priority: 'medium', estimatedMinutes: 30, relatedTopics: [], confidence: 0.5, context: '' }] },
       ];
 
       const result = await analyzeMeetingEffectiveness(meetings, 1, 10);
@@ -524,8 +524,8 @@ describe('Meeting Assistant', () => {
           actionItems: Array.from({ length: 6 }, (_, i) => ({
             taskName: `Task ${i}`,
             description: `Desc ${i}`,
-            dueDate: null,
-            priority: 'medium' as const,
+            dueDate: undefined,
+            priority: 'medium' as 'medium',
             estimatedMinutes: 30,
             relatedTopics: [],
             confidence: 0.5,
@@ -551,8 +551,8 @@ describe('Meeting Assistant', () => {
           actionItems: Array.from({ length: 6 }, (_, i) => ({
             taskName: `Task ${i}`,
             description: `Desc ${i}`,
-            dueDate: null,
-            priority: 'medium' as const,
+            dueDate: undefined,
+            priority: 'medium' as 'medium',
             estimatedMinutes: 30,
             relatedTopics: [],
             confidence: 0.5,
@@ -572,8 +572,8 @@ describe('Meeting Assistant', () => {
   describe('syncMeetingActionItemsToCalendar', () => {
     it('should sync all action items successfully', async () => {
       const actionItems: ExtractedActionItem[] = [
-        { taskName: 'Task 1', description: 'Desc 1', dueDate: null, priority: 'medium', estimatedMinutes: 30, relatedTopics: [], confidence: 0.5, context: '' },
-        { taskName: 'Task 2', description: 'Desc 2', dueDate: null, priority: 'high', estimatedMinutes: 45, relatedTopics: [], confidence: 0.8, context: '' },
+        { taskName: 'Task 1', description: 'Desc 1', dueDate: undefined, priority: 'medium', estimatedMinutes: 30, relatedTopics: [], confidence: 0.5, context: '' },
+        { taskName: 'Task 2', description: 'Desc 2', dueDate: undefined, priority: 'high', estimatedMinutes: 45, relatedTopics: [], confidence: 0.8, context: '' },
       ];
 
       const result = await syncMeetingActionItemsToCalendar(actionItems);
@@ -592,8 +592,8 @@ describe('Meeting Assistant', () => {
       const actionItems: ExtractedActionItem[] = Array.from({ length: 5 }, (_, i) => ({
         taskName: `Task ${i}`,
         description: `Desc ${i}`,
-        dueDate: null,
-        priority: 'medium' as const,
+        dueDate: undefined,
+        priority: 'medium' as 'medium',
         estimatedMinutes: 30,
         relatedTopics: [],
         confidence: 0.5,
