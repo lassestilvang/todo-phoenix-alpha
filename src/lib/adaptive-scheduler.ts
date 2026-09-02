@@ -176,7 +176,7 @@ function analyzeTaskPatterns(taskId: number): TaskPattern | null {
     completionRate,
     preferredStartTime: preferredHour,
     preferredDayOfWeek: preferredDays,
-    energyLevel: avgDuration > 120 ? 'heavy' : avgDuration > 60 ? 'medium' : 'light',
+    energyLevel: avgDuration > 120 ? 'high' : avgDuration > 60 ? 'medium' : 'low',
     cognitiveLoad: task.priority === 'high' ? 'heavy' : task.priority === 'medium' ? 'medium' : 'light',
     context: [],
   };
@@ -510,7 +510,7 @@ export function optimizeSchedule(
 
     return {
       ...rec,
-      scheduledDate: newDate.toISOString().split('T')[0],
+      scheduledDate: new Date(newDate).toISOString().split('T')[0],
       scheduledTime: newTime,
       confidence: newConfidence,
     };
