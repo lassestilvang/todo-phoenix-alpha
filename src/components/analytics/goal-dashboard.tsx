@@ -9,12 +9,12 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectTrigger, SelectValue, SelectContent, Option } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/components/ui/sonner";
+import { toast } from "sonner"; // Direct toast import from sonner
 import { getObjectives, createObjective, updateObjectiveStatus, getGoalMetrics, getGoalRecommendations } from "@/lib/goal-tracker";
-import type { Objective, GoalWithProgress } from "@/lib/goal-tracker";
+import type { Objective, GoalWithProgress, GoalMetrics } from "@/lib/goal-tracker";
 
 interface GoalDashboardProps {
   userId?: string;
@@ -36,7 +36,6 @@ export function GoalDashboard({ userId = 'default', showRecommendations = true }
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedObjective, setSelectedObjective] = useState<Objective | null>(null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
@@ -231,10 +230,10 @@ export function GoalDashboard({ userId = 'default', showRecommendations = true }
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <Option value="active">Active</Option>
-                      <Option value="completed">Completed</Option>
-                      <Option value="on-hold">On Hold</Option>
-                      <Option value="cancelled">Cancelled</Option>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="on-hold">On Hold</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -413,10 +412,10 @@ function CreateObjectiveDialog({ open, onOpenChange, onCreate }: CreateObjective
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <Option value="low">Low</Option>
-                <Option value="medium">Medium</Option>
-                <Option value="high">High</Option>
-                <Option value="critical">Critical</Option>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
               </SelectContent>
             </Select>
           </div>
