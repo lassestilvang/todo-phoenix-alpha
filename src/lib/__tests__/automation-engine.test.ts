@@ -136,9 +136,9 @@ describe('Automation Engine', () => {
         conditions: [{ field: 'priority', operator: 'equals', value: 'high' }],
         actions: [],
         isActive: true,
-        priority: 'medium',
+        priority: 'medium' as const,
         createdBy: 'test-user',
-      } as AutomationRule;
+      } as unknown as AutomationRule;
 
       const result = createAutomationRule(ruleWithConditions);
       expect(result).toBeDefined();
@@ -166,9 +166,9 @@ describe('Automation Engine', () => {
           },
         ],
         isActive: true,
-        priority: 'low',
+        priority: 'low' as const,
         createdBy: 'test-user',
-      } as AutomationRule;
+      } as unknown as AutomationRule;
 
       mockDb.run.mockReturnValue({ changes: 1, lastInsertRowid: 456 });
 
@@ -531,9 +531,9 @@ describe('Automation Engine', () => {
         },
         actions: [{ id: 'a1', name: 'Test', type: 'create-task', isEnabled: true, config: {} }],
         isActive: true,
-        priority: 'medium',
+        priority: 'medium' as 'medium',
         createdBy: 'user',
-      };
+      } as Omit<AutomationRule, "id" | "createdAt">;
 
       mockDb.prepare.mockImplementation(() => {
         throw new Error('Insert failed');
