@@ -255,7 +255,7 @@ export function getGoalRecommendations(userId: string): GoalRecommendation[] {
     // Find tasks that align with this objective's key results
     for (const task of incompleteTasks) {
       let matchScore = 0;
-      let reasons: string[] = [];
+      const reasons: string[] = [];
 
       for (const kr of keyResults) {
         // Check if task name/name matches KR name (simple matching)

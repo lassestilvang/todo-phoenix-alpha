@@ -531,7 +531,7 @@ describe('Automation Engine', () => {
         },
         actions: [{ id: 'a1', name: 'Test', type: 'create-task', isEnabled: true, config: {} }],
         isActive: true,
-        priority: 'medium' as 'medium',
+        priority: 'medium' as const,
         createdBy: 'user',
       } as Omit<AutomationRule, "id" | "createdAt">;
 

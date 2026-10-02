@@ -287,7 +287,7 @@ export function generateAdaptiveSchedule(
   });
 
   // Generate schedule for each task
-  let currentDate = new Date(startDate);
+  const currentDate = new Date(startDate);
   let currentHour = profile.preferredWorkBlocks[0] || 9;
 
   for (const pattern of sortedTasks) {
@@ -476,7 +476,7 @@ export function optimizeSchedule(
     const hour = parseInt(rec.scheduledTime.split(':')[0]);
 
     let newConfidence = rec.confidence;
-    let newDate = rec.scheduledDate;
+    const newDate = rec.scheduledDate;
     let newTime = rec.scheduledTime;
 
     // Check if current slot is unavailable
